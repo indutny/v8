@@ -928,8 +928,8 @@ Object* Debug::Break(Arguments args) {
   break_location_iterator.FindBreakLocationFromAddress(frame->pc());
 
   // Check whether step next reached a new statement.
-  bool skipBreak = StepNextContinue(&break_location_iterator, frame);
-  if (!skipBreak) {
+
+  if (!(StepNextContinue(&break_location_iterator, frame))) {
     // Decrease steps left if performing multiple steps.
     if (thread_local_.step_count_ > 0) {
       thread_local_.step_count_--;
@@ -982,7 +982,7 @@ Object* Debug::Break(Arguments args) {
 
     // If StepNext gone deeper in code
     // StepOut until original frame
-    if (skipBreak && step_action == StepNext) {
+    if (step_action == StepNext && frame->fp() < thread_local_.last_fp_) {
       // Count frames until target frame
       int count = 0;
       JavaScriptFrameIterator it(isolate_);
