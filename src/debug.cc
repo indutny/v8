@@ -928,8 +928,7 @@ Object* Debug::Break(Arguments args) {
   break_location_iterator.FindBreakLocationFromAddress(frame->pc());
 
   // Check whether step next reached a new statement.
-
-  if (!(StepNextContinue(&break_location_iterator, frame))) {
+  if (!StepNextContinue(&break_location_iterator, frame)) {
     // Decrease steps left if performing multiple steps.
     if (thread_local_.step_count_ > 0) {
       thread_local_.step_count_--;
