@@ -542,7 +542,6 @@ void Debug::ThreadInit() {
   thread_local_.last_statement_position_ = RelocInfo::kNoPosition;
   thread_local_.step_count_ = 0;
   thread_local_.last_fp_ = 0;
-  thread_local_.queued_step_action_ = StepNone;
   thread_local_.queued_step_count_ = 0;
   thread_local_.step_into_fp_ = 0;
   thread_local_.step_out_fp_ = 0;
@@ -960,15 +959,13 @@ Object* Debug::Break(Arguments args) {
     ClearStepping();
 
     if (thread_local_.queued_step_count_ > 0) {
-      // Perform queued step
-      StepAction step_action = thread_local_.queued_step_action_;
+      // Perform queued steps
       int step_count = thread_local_.queued_step_count_;
 
       // Clear queue
-      thread_local_.queued_step_action_ = StepNone;
       thread_local_.queued_step_count_ = 0;
 
-      PrepareStep(step_action, step_count);
+      PrepareStep(StepNext, step_count);
     } else {
       // Notify the debug event listeners.
       isolate_->debugger()->OnDebugBreak(break_points_hit, false);
@@ -995,7 +992,6 @@ Object* Debug::Break(Arguments args) {
         if (step_count > 1) {
           // Save old count and action to continue stepping after
           // StepOut
-          thread_local_.queued_step_action_ = step_action;
           thread_local_.queued_step_count_ = step_count - 1;
         }
 
