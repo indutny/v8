@@ -2762,6 +2762,14 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
+      if (!clause->IsSymbolCompare()) {
+        // Finish with deoptimize and add uses of enviroment values to
+        // account for invisible uses.
+        current_block()->FinishExitWithDeoptimization(HDeoptimize::kUseAll);
+        set_current_block(NULL);
+        break;
+      }
+
       compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
     }
 
