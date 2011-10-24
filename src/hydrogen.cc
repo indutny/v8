@@ -2701,14 +2701,27 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HValue* tag_value = Pop();
   HBasicBlock* first_test_block = current_block();
 
+  enum {
+    none, smi, string
+  } clause_type = none;
+
   // 1. Build all the tests, with dangling true branches.  Unconditionally
   // deoptimize if we encounter a non-smi comparison.
   for (int i = 0; i < clause_count; ++i) {
     CaseClause* clause = clauses->at(i);
     if (clause->is_default()) continue;
-    if (!clause->label()->IsSmiLiteral() &&
-        !clause->label()->IsStringLiteral()) {
-      return Bailout("SwitchStatement: non-literal switch label");
+
+    if (clause_type == none) {
+      if (clause->label()->IsSmiLiteral()) {
+        clause_type = smi;
+      } else if (clause->label()->IsStringLiteral()) {
+        clause_type = string;
+      } else {
+        return Bailout("SwitchStatement: non-literal switch label");
+      }
+    } else if (clause->label()->IsSmiLiteral() && clause_type == string ||
+               clause->label()->IsStringLiteral() && clause_type == smi) {
+      return Bailout("SwitchStatemnt: mixed label types are not supported");
     }
 
     clause->RecordTypeFeedback(oracle());
@@ -2720,24 +2733,32 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     HBasicBlock* next_test_block = graph()->CreateBasicBlock();
     HBasicBlock* body_block = graph()->CreateBasicBlock();
 
-    if (clause->IsSmiCompare()) {
-      HCompareIDAndBranch* compare =
+    HControlInstruction* compare;
+
+    if (clause_type == smi) {
+      if (!clause->IsSmiCompare()) {
+        // Finish with deoptimize and add uses of enviroment values to
+        // account for invisible uses.
+        current_block()->FinishExitWithDeoptimization(HDeoptimize::kUseAll);
+        set_current_block(NULL);
+        break;
+      }
+
+      HCompareIDAndBranch* compare_ =
           new(zone()) HCompareIDAndBranch(tag_value,
                                           label_value,
                                           Token::EQ_STRICT);
-      compare->SetInputRepresentation(Representation::Integer32());
-      compare->SetSuccessorAt(0, body_block);
-      compare->SetSuccessorAt(1, next_test_block);
-      current_block()->Finish(compare);
+      compare_->SetInputRepresentation(Representation::Integer32());
+      compare = reinterpret_cast<HControlInstruction*>(compare_);
     } else {
-      AddInstruction(new(zone()) HCheckNonSmi(tag_value));
-      AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
-      HCompareObjectEqAndBranch* compare =
+      HCompareObjectEqAndBranch* compare_ =
           new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
-      compare->SetSuccessorAt(0, body_block);
-      compare->SetSuccessorAt(1, next_test_block);
-      current_block()->Finish(compare);
+      compare = reinterpret_cast<HControlInstruction*>(compare_);
     }
+
+    compare->SetSuccessorAt(0, body_block);
+    compare->SetSuccessorAt(1, next_test_block);
+    current_block()->Finish(compare);
 
     set_current_block(next_test_block);
   }
