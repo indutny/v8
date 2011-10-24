@@ -2726,8 +2726,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
-    AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
     AddInstruction(new(zone()) HCheckNonSmi(tag_value));
+    AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
   }
 
   // 2. Build all the tests, with dangling true branches
