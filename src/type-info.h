@@ -194,7 +194,7 @@ class TypeInfo {
     kSmi = 0x17,           // 0010111
     kDouble = 0x19,        // 0011001
     kString = 0x30,        // 0110000
-    kSymbol = 0x31,        // 0110001
+    kSymbol = 0x32,        // 0110010
     kNonPrimitive = 0x40,  // 1000000
     kUninitialized = 0x7f  // 1111111
   };
