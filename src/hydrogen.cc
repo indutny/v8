@@ -2848,6 +2848,17 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     break_block->SetJoinId(stmt->ExitId());
     set_current_block(break_block);
   }
+
+  // Test switch's tag value if all clauses are string literals
+  if (switch_type == STRING_SWITCH) {
+    HIsStringAndBranch* compare = new(zone())
+        HIsStringAndBranch(tag_value);
+    compare->SetSuccessorAt(0, current_block());
+    compare->SetSuccessorAt(1, break_block);
+
+    current_block()->Finish(compare);
+  }
+
 }
 
 

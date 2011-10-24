@@ -1716,6 +1716,37 @@ void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
 }
 
 
+Condition LCodeGen::EmitIsString(Register input,
+                                 Register temp1,
+                                 Label* is_not_string,
+                                 Label* is_string) {
+  ASSERT(!input.is(kScratchRegister));
+
+  __ JumpIfSmi(input, is_not_string);
+
+  Condition is_string_ = masm_->IsObjectStringType(input, temp1, temp1);
+  __ j(NegateCondition(is_string_), is_not_string);
+  __ j(is_string_, is_string);
+
+  return below_equal;
+}
+
+
+void LCodeGen::DoIsStringAndBranch(LIsStringAndBranch* instr) {
+  Register reg = ToRegister(instr->InputAt(0));
+  Register temp = ToRegister(instr->TempAt(0));
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+  Label* true_label = chunk_->GetAssemblyLabel(true_block);
+  Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+  Condition true_cond = EmitIsString(reg, temp, false_label, true_label);
+
+  EmitBranch(true_block, false_block, true_cond);
+}
+
+
 void LCodeGen::DoIsSmiAndBranch(LIsSmiAndBranch* instr) {
   Operand input = ToOperand(instr->InputAt(0));
 
