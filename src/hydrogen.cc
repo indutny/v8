@@ -2701,14 +2701,14 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HValue* tag_value = Pop();
   HBasicBlock* first_test_block = current_block();
 
-  SwitchType switch_type = UNSUPPORTED_SWITCH;
+  SwitchType switch_type = UNKNOWN_SWITCH;
 
   // 1. Extract clause type
   for (int i = 0; i < clause_count; ++i) {
     CaseClause* clause = clauses->at(i);
     if (clause->is_default()) continue;
 
-    if (switch_type == UNSUPPORTED_SWITCH) {
+    if (switch_type == UNKNOWN_SWITCH) {
       if (clause->label()->IsSmiLiteral()) {
         switch_type = SMI_SWITCH;
       } else if (clause->label()->IsStringLiteral()) {
@@ -2716,10 +2716,10 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       } else {
         return Bailout("SwitchStatement: non-literal switch label");
       }
-    } else if (clause->label()->IsSmiLiteral() &&
-               switch_type == STRING_SWITCH ||
-               clause->label()->IsStringLiteral() &&
-               switch_type == SMI_SWITCH) {
+    } else if ((switch_type == STRING_SWITCH &&
+                !clause->label()->IsStringLiteral()) ||
+               (switch_type == SMI_SWITCH &&
+                !clause->label()->IsSmiLiteral())) {
       return Bailout("SwitchStatemnt: mixed label types are not supported");
     }
   }
@@ -2727,6 +2727,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
     AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
+    AddInstruction(new(zone()) HCheckNonSmi(tag_value));
   }
 
   // 2. Build all the tests, with dangling true branches
