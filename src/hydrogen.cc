@@ -2701,28 +2701,38 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HValue* tag_value = Pop();
   HBasicBlock* first_test_block = current_block();
 
-  enum {
-    none, smi, string
-  } clause_type = none;
+  SwitchType switch_type = UNSUPPORTED_SWITCH;
 
-  // 1. Build all the tests, with dangling true branches.  Unconditionally
-  // deoptimize if we encounter a non-smi comparison.
+  // 1. Extract clause type
   for (int i = 0; i < clause_count; ++i) {
     CaseClause* clause = clauses->at(i);
     if (clause->is_default()) continue;
 
-    if (clause_type == none) {
+    if (switch_type == UNSUPPORTED_SWITCH) {
       if (clause->label()->IsSmiLiteral()) {
-        clause_type = smi;
+        switch_type = SMI_SWITCH;
       } else if (clause->label()->IsStringLiteral()) {
-        clause_type = string;
+        switch_type = STRING_SWITCH;
       } else {
         return Bailout("SwitchStatement: non-literal switch label");
       }
-    } else if (clause->label()->IsSmiLiteral() && clause_type == string ||
-               clause->label()->IsStringLiteral() && clause_type == smi) {
+    } else if (clause->label()->IsSmiLiteral() &&
+               switch_type == STRING_SWITCH ||
+               clause->label()->IsStringLiteral() &&
+               switch_type == SMI_SWITCH) {
       return Bailout("SwitchStatemnt: mixed label types are not supported");
     }
+  }
+
+  // Test switch's tag value if all clauses are string literals
+  if (switch_type == STRING_SWITCH) {
+    AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
+  }
+
+  // 2. Build all the tests, with dangling true branches
+  for (int i = 0; i < clause_count; ++i) {
+    CaseClause* clause = clauses->at(i);
+    if (clause->is_default()) continue;
 
     clause->RecordTypeFeedback(oracle());
 
@@ -2735,7 +2745,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
     HControlInstruction* compare;
 
-    if (clause_type == smi) {
+    if (switch_type == SMI_SWITCH) {
       if (!clause->IsSmiCompare()) {
         // Finish with deoptimize and add uses of enviroment values to
         // account for invisible uses.
@@ -2749,11 +2759,9 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
                                           label_value,
                                           Token::EQ_STRICT);
       compare_->SetInputRepresentation(Representation::Integer32());
-      compare = reinterpret_cast<HControlInstruction*>(compare_);
+      compare = compare_;
     } else {
-      HCompareObjectEqAndBranch* compare_ =
-          new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
-      compare = reinterpret_cast<HControlInstruction*>(compare_);
+      compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
     }
 
     compare->SetSuccessorAt(0, body_block);
@@ -2767,7 +2775,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // exit.  This block is NULL if we deoptimized.
   HBasicBlock* last_block = current_block();
 
-  // 2. Loop over the clauses and the linked list of tests in lockstep,
+  // 3. Loop over the clauses and the linked list of tests in lockstep,
   // translating the clause bodies.
   HBasicBlock* curr_test_block = first_test_block;
   HBasicBlock* fall_through_block = NULL;
