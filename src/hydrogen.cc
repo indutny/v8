@@ -2738,6 +2738,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     current_block()->Finish(type_check);
 
     set_current_block(first_test_block);
+
+    AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
   }
 
   // 2. Build all the tests, with dangling true branches
