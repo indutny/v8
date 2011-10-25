@@ -2696,6 +2696,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     return Bailout("SwitchStatement: too many clauses");
   }
 
+  HValue* context = environment()->LookupContext();
+
   CHECK_ALIVE(VisitForValue(stmt->tag()));
   AddSimulate(stmt->EntryId());
   HValue* tag_value = Pop();
@@ -2738,8 +2740,6 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     current_block()->Finish(type_check);
 
     set_current_block(first_test_block);
-
-    AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
   }
 
   // 2. Build all the tests, with dangling true branches
@@ -2774,7 +2774,17 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
-      compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
+      if (clause->IsSymbolCompare()) {
+        compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
+      } else {
+        HCompareGeneric* result =
+            new(zone()) HCompareGeneric(context, tag_value, label_value,
+                                        Token::EQ_STRICT);
+        AddInstruction(result);
+
+        compare = new(zone())
+            HCompareObjectEqAndBranch(result, graph()->GetConstantTrue());
+      }
     }
 
     compare->SetSuccessorAt(0, body_block);
