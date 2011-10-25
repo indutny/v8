@@ -1723,10 +1723,9 @@ Condition LCodeGen::EmitIsString(Register input,
   __ JumpIfSmi(input, is_not_string);
 
   Condition is_string_ = masm_->IsObjectStringType(input, temp1, temp1);
-  __ j(NegateCondition(is_string_), is_not_string);
   __ j(is_string_, is_string);
 
-  return below_equal;
+  return equal;
 }
 
 
