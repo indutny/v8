@@ -2724,10 +2724,20 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     }
   }
 
+  HUnaryControlInstruction* type_check = NULL;
+  HBasicBlock* type_check_block = NULL;
+
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
-    AddInstruction(new(zone()) HCheckNonSmi(tag_value));
-    AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
+    type_check = new (zone()) HIsStringAndBranch(tag_value);
+    first_test_block = graph()->CreateBasicBlock();
+    type_check_block = graph()->CreateBasicBlock();
+
+    type_check->SetSuccessorAt(0, first_test_block);
+    type_check->SetSuccessorAt(1, type_check_block);
+    current_block()->Finish(type_check);
+
+    set_current_block(first_test_block);
   }
 
   // 2. Build all the tests, with dangling true branches
@@ -2762,14 +2772,6 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
-      if (!clause->IsSymbolCompare()) {
-        // Finish with deoptimize and add uses of enviroment values to
-        // account for invisible uses.
-        current_block()->FinishExitWithDeoptimization(HDeoptimize::kUseAll);
-        set_current_block(NULL);
-        break;
-      }
-
       compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
     }
 
@@ -2783,6 +2785,14 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // Save the current block to use for the default or to join with the
   // exit.  This block is NULL if we deoptimized.
   HBasicBlock* last_block = current_block();
+
+  if (type_check_block != NULL) {
+    if (last_block != NULL) {
+      type_check_block->Goto(last_block);
+    } else {
+      type_check_block->Goto(first_test_block);
+    }
+  }
 
   // 3. Loop over the clauses and the linked list of tests in lockstep,
   // translating the clause bodies.
@@ -2848,17 +2858,6 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     break_block->SetJoinId(stmt->ExitId());
     set_current_block(break_block);
   }
-
-  // Test switch's tag value if all clauses are string literals
-  if (switch_type == STRING_SWITCH) {
-    HIsStringAndBranch* compare = new(zone())
-        HIsStringAndBranch(tag_value);
-    compare->SetSuccessorAt(0, current_block());
-    compare->SetSuccessorAt(1, break_block);
-
-    current_block()->Finish(compare);
-  }
-
 }
 
 
