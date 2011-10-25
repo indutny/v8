@@ -1720,8 +1720,6 @@ Condition LCodeGen::EmitIsString(Register input,
                                  Register temp1,
                                  Label* is_not_string,
                                  Label* is_string) {
-  ASSERT(!input.is(kScratchRegister));
-
   __ JumpIfSmi(input, is_not_string);
 
   Condition is_string_ = masm_->IsObjectStringType(input, temp1, temp1);
