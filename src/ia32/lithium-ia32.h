@@ -104,7 +104,6 @@ class LCodeGen;
   V(IsNilAndBranch)                             \
   V(IsObjectAndBranch)                          \
   V(IsStringAndBranch)                          \
-  V(IsSymbolAndBranch)                          \
   V(IsSmiAndBranch)                             \
   V(IsUndetectableAndBranch)                    \
   V(JSArrayLength)                              \
@@ -656,19 +655,6 @@ class LIsStringAndBranch: public LControlInstruction<1, 1> {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(IsStringAndBranch, "is-string-and-branch")
-
-  virtual void PrintDataTo(StringStream* stream);
-};
-
-
-class LIsSymbolAndBranch: public LControlInstruction<1, 1> {
- public:
-  LIsSymbolAndBranch(LOperand* value, LOperand* temp) {
-    inputs_[0] = value;
-    temps_[0] = temp;
-  }
-
-  DECLARE_CONCRETE_INSTRUCTION(IsSymbolAndBranch, "is-symbol-and-branch")
 
   virtual void PrintDataTo(StringStream* stream);
 };

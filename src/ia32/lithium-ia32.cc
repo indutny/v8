@@ -237,13 +237,6 @@ void LIsStringAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
-void LIsSymbolAndBranch::PrintDataTo(StringStream* stream) {
-  stream->Add("if is_symbol(");
-  InputAt(0)->PrintTo(stream);
-  stream->Add(") then B%d else B%d", true_block_id(), false_block_id());
-}
-
-
 void LIsSmiAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if is_smi(");
   InputAt(0)->PrintTo(stream);
@@ -1523,13 +1516,6 @@ LInstruction* LChunkBuilder::DoIsStringAndBranch(HIsStringAndBranch* instr) {
   ASSERT(instr->value()->representation().IsTagged());
   LOperand* temp = TempRegister();
   return new LIsStringAndBranch(UseRegister(instr->value()), temp);
-}
-
-
-LInstruction* LChunkBuilder::DoIsSymbolAndBranch(HIsSymbolAndBranch* instr) {
-  ASSERT(instr->value()->representation().IsTagged());
-  LOperand* temp = TempRegister();
-  return new LIsSymbolAndBranch(UseRegister(instr->value()), temp);
 }
 
 
