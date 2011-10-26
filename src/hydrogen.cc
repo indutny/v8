@@ -2726,18 +2726,18 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     }
   }
 
-  HUnaryControlInstruction* type_check = NULL;
-  HBasicBlock* type_check_block = NULL;
+  HUnaryControlInstruction* oddball_check = NULL;
+  HBasicBlock* oddball_block = NULL;
 
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
-    type_check = new (zone()) HIsStringAndBranch(tag_value);
+    oddball_check = new (zone()) HIsStringAndBranch(tag_value);
     first_test_block = graph()->CreateBasicBlock();
-    type_check_block = graph()->CreateBasicBlock();
+    oddball_block = graph()->CreateBasicBlock();
 
-    type_check->SetSuccessorAt(0, first_test_block);
-    type_check->SetSuccessorAt(1, type_check_block);
-    current_block()->Finish(type_check);
+    oddball_check->SetSuccessorAt(0, first_test_block);
+    oddball_check->SetSuccessorAt(1, oddball_block);
+    current_block()->Finish(oddball_check);
 
     set_current_block(first_test_block);
   }
@@ -2798,11 +2798,11 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // exit.  This block is NULL if we deoptimized.
   HBasicBlock* last_block = current_block();
 
-  if (type_check_block != NULL) {
+  if (oddball_block != NULL) {
     if (last_block != NULL) {
-      type_check_block->Goto(last_block);
+      oddball_block->Goto(last_block);
     } else {
-      type_check_block->Goto(first_test_block);
+      oddball_block->Goto(first_test_block);
     }
   }
 
