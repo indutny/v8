@@ -291,6 +291,14 @@ class LCodeGen BASE_EMBEDDED {
                          Label* is_not_string,
                          Label* is_string);
 
+  // Emits optimized code for %_IsSymbol(x).  Preserves input register.
+  // Returns the condition on which a final split to
+  // true and false label should be made, to optimize fallthrough.
+  Condition EmitIsSymbol(Register input,
+                         Register temp1,
+                         Label* is_not_symbol,
+                         Label* is_symbol);
+
   // Emits optimized code for %_IsConstructCall().
   // Caller should branch on equal condition.
   void EmitIsConstructCall(Register temp);

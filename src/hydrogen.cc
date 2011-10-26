@@ -2728,18 +2728,29 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
   HUnaryControlInstruction* type_check = NULL;
   HBasicBlock* type_check_block = NULL;
+  HBasicBlock* compare_branch_block = NULL;
 
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
-    type_check = new (zone()) HIsStringAndBranch(tag_value);
     first_test_block = graph()->CreateBasicBlock();
     type_check_block = graph()->CreateBasicBlock();
 
-    type_check->SetSuccessorAt(0, first_test_block);
+    compare_branch_block = graph()->CreateBasicBlock();
+    HBasicBlock* symbol_compare_block = graph()->CreateBasicBlock();
+
+    type_check = new (zone()) HIsStringAndBranch(tag_value);
+
+    type_check->SetSuccessorAt(0, symbol_compare_block);
     type_check->SetSuccessorAt(1, type_check_block);
     current_block()->Finish(type_check);
 
     set_current_block(first_test_block);
+
+    // Start compare branch
+    HIsSymbolAndBranch* compare = new (zone()) HIsSymbolAndBranch(tag_value);
+    compare->SetSuccessorAt(0, first_test_block);
+    compare->SetSuccessorAt(1, compare_branch_block);
+    symbol_compare_block->Finish(compare);
   }
 
   // 2. Build all the tests, with dangling true branches
@@ -2774,17 +2785,21 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
-      if (clause->IsSymbolCompare()) {
-        compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
-      } else {
-        HCompareGeneric* result =
-            new(zone()) HCompareGeneric(context, tag_value, label_value,
-                                        Token::EQ_STRICT);
-        AddInstruction(result);
+      compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
 
-        compare = new(zone())
-            HCompareObjectEqAndBranch(result, graph()->GetConstantTrue());
-      }
+      // Add comparisons to parallel branch
+      HCompareGeneric* result =
+          new(zone()) HCompareGeneric(context, tag_value, label_value,
+                                      Token::EQ_STRICT);
+      compare_branch_block->AddInstruction(result);
+
+      HBasicBlock* compare_branch_next_block = graph()->CreateBasicBlock();
+      HCompareObjectEqAndBranch* compare_ = new(zone())
+          HCompareObjectEqAndBranch(result, graph()->GetConstantTrue());
+      compare_->SetSuccessorAt(0, body_block);
+      compare_->SetSuccessorAt(1, compare_branch_next_block);
+      compare_branch_block->Finish(compare_);
+      compare_branch_block = compare_branch_next_block;
     }
 
     compare->SetSuccessorAt(0, body_block);
@@ -2801,8 +2816,12 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   if (type_check_block != NULL) {
     if (last_block != NULL) {
       type_check_block->Goto(last_block);
+
+      // Attach default block to parallel branch
+      compare_branch_block->Goto(last_block);
     } else {
       type_check_block->Goto(first_test_block);
+      compare_branch_block->Goto(first_test_block);
     }
   }
 

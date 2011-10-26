@@ -121,6 +121,7 @@ class LChunkBuilder;
   V(IsNilAndBranch)                            \
   V(IsObjectAndBranch)                         \
   V(IsStringAndBranch)                         \
+  V(IsSymbolAndBranch)                         \
   V(IsSmiAndBranch)                            \
   V(IsUndetectableAndBranch)                   \
   V(JSArrayLength)                             \
@@ -2703,6 +2704,7 @@ class HIsObjectAndBranch: public HUnaryControlInstruction {
   DECLARE_CONCRETE_INSTRUCTION(IsObjectAndBranch)
 };
 
+
 class HIsStringAndBranch: public HUnaryControlInstruction {
  public:
   explicit HIsStringAndBranch(HValue* value)
@@ -2713,6 +2715,19 @@ class HIsStringAndBranch: public HUnaryControlInstruction {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(IsStringAndBranch)
+};
+
+
+class HIsSymbolAndBranch: public HUnaryControlInstruction {
+ public:
+  explicit HIsSymbolAndBranch(HValue* value)
+    : HUnaryControlInstruction(value, NULL, NULL) { }
+
+  virtual Representation RequiredInputRepresentation(int index) {
+    return Representation::Tagged();
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(IsSymbolAndBranch)
 };
 
 

@@ -1744,6 +1744,37 @@ void LCodeGen::DoIsStringAndBranch(LIsStringAndBranch* instr) {
 }
 
 
+Condition LCodeGen::EmitIsSymbol(Register input,
+                                 Register temp1,
+                                 Label* is_not_symbol,
+                                 Label* is_symbol) {
+  __ JumpIfSmi(input, is_not_symbol);
+
+  __ mov(temp1, FieldOperand(input, HeapObject::kMapOffset));
+  __ movzx_b(temp1, FieldOperand(temp1, Map::kInstanceTypeOffset));
+  __ and_(temp1, kIsSymbolMask | kIsNotStringMask);
+  __ cmp(temp1, kSymbolTag | kStringTag);
+  __ j(not_equal, is_not_symbol);
+
+  return equal;
+}
+
+
+void LCodeGen::DoIsSymbolAndBranch(LIsSymbolAndBranch* instr) {
+  Register reg = ToRegister(instr->InputAt(0));
+  Register temp = ToRegister(instr->TempAt(0));
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+  Label* true_label = chunk_->GetAssemblyLabel(true_block);
+  Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+  Condition true_cond = EmitIsSymbol(reg, temp, false_label, true_label);
+
+  EmitBranch(true_block, false_block, true_cond);
+}
+
+
 void LCodeGen::DoIsSmiAndBranch(LIsSmiAndBranch* instr) {
   Operand input = ToOperand(instr->InputAt(0));
 
