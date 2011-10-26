@@ -2726,31 +2726,31 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     }
   }
 
-  HUnaryControlInstruction* oddball_check = NULL;
-  HBasicBlock* oddball_branch  = NULL;
-  HBasicBlock* non_symbol_branch = NULL;
+  HUnaryControlInstruction* type_check = NULL;
+  HBasicBlock* type_check_block = NULL;
+  HBasicBlock* compare_branch_block = NULL;
 
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
     first_test_block = graph()->CreateBasicBlock();
-    oddball_branch  = graph()->CreateBasicBlock();
+    type_check_block = graph()->CreateBasicBlock();
 
-    non_symbol_branch = graph()->CreateBasicBlock();
-    HBasicBlock* symbol_compare = graph()->CreateBasicBlock();
+    compare_branch_block = graph()->CreateBasicBlock();
+    HBasicBlock* symbol_compare_block = graph()->CreateBasicBlock();
 
-    oddball_check = new (zone()) HIsStringAndBranch(tag_value);
+    type_check = new (zone()) HIsStringAndBranch(tag_value);
 
-    oddball_check->SetSuccessorAt(0, symbol_compare);
-    oddball_check->SetSuccessorAt(1, oddball_branch);
-    current_block()->Finish(oddball_check);
+    type_check->SetSuccessorAt(0, symbol_compare_block);
+    type_check->SetSuccessorAt(1, type_check_block);
+    current_block()->Finish(type_check);
 
     set_current_block(first_test_block);
 
     // Start compare branch
     HIsSymbolAndBranch* compare = new (zone()) HIsSymbolAndBranch(tag_value);
     compare->SetSuccessorAt(0, first_test_block);
-    compare->SetSuccessorAt(1, non_symbol_branch);
-    symbol_compare->Finish(compare);
+    compare->SetSuccessorAt(1, compare_branch_block);
+    symbol_compare_block->Finish(compare);
   }
 
   // 2. Build all the tests, with dangling true branches
@@ -2785,24 +2785,21 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
-      // Add compare symbols to normal branch
       compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
 
-      // Add generic compare to alternative(non_symbol) branch
-      HBasicBlock* non_symbol_next_block = graph()->CreateBasicBlock();
-      HCompareGeneric* is_equal =
+      // Add comparisons to parallel branch
+      HCompareGeneric* result =
           new(zone()) HCompareGeneric(context, tag_value, label_value,
                                       Token::EQ_STRICT);
-      non_symbol_branch->AddInstruction(is_equal);
+      compare_branch_block->AddInstruction(result);
 
-      HCompareObjectEqAndBranch* generic_compare = new(zone())
-          HCompareObjectEqAndBranch(is_equal, graph()->GetConstantTrue());
-
-      generic_compare->SetSuccessorAt(0, body_block);
-      generic_compare->SetSuccessorAt(1, non_symbol_next_block);
-
-      non_symbol_branch->Finish(generic_compare);
-      non_symbol_branch = non_symbol_next_block;
+      HBasicBlock* compare_branch_next_block = graph()->CreateBasicBlock();
+      HCompareObjectEqAndBranch* compare_ = new(zone())
+          HCompareObjectEqAndBranch(result, graph()->GetConstantTrue());
+      compare_->SetSuccessorAt(0, body_block);
+      compare_->SetSuccessorAt(1, compare_branch_next_block);
+      compare_branch_block->Finish(compare_);
+      compare_branch_block = compare_branch_next_block;
     }
 
     compare->SetSuccessorAt(0, body_block);
@@ -2816,17 +2813,15 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // exit.  This block is NULL if we deoptimized.
   HBasicBlock* last_block = current_block();
 
-  // If we're checking for oddball input
-  // attach oddball_branch to latest block if we've one
-  if (oddball_branch != NULL) {
+  if (type_check_block != NULL) {
     if (last_block != NULL) {
-      oddball_branch->Goto(last_block);
+      type_check_block->Goto(last_block);
 
-      // Attach non_symbol branch's end to latest block too
-      non_symbol_branch->Goto(last_block);
+      // Attach default block to parallel branch
+      compare_branch_block->Goto(last_block);
     } else {
-      oddball_branch->Goto(first_test_block);
-      non_symbol_branch->Goto(first_test_block);
+      type_check_block->Goto(first_test_block);
+      compare_branch_block->Goto(first_test_block);
     }
   }
 
