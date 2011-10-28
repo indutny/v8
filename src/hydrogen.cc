@@ -2743,8 +2743,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   }
 
   // 2. Build all the tests, with dangling true branches
-  for (int i = 0; i < clause_count; ++i) {
-    CaseClause* clause = clauses->at(i);
+  for (int i = 0; i < 2 * clause_count; ++i) {
+    CaseClause* clause = clauses->at(i % clause_count);
     if (clause->is_default()) continue;
 
     clause->RecordTypeFeedback(oracle());
@@ -2774,7 +2774,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
-      if (clause->IsSymbolCompare()) {
+      if (i < clause_count) {
         compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
       } else {
         HCompareGeneric* result =
@@ -2813,13 +2813,14 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HBasicBlock* fall_through_block = NULL;
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
-    for (int i = 0; i < clause_count; ++i) {
-      CaseClause* clause = clauses->at(i);
+    for (int i = 0; i < clause_count * 2; ++i) {
+      CaseClause* clause = clauses->at(i % clause_count);
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.
       HBasicBlock* normal_block = NULL;
       if (clause->is_default()) {
+        if (i < clause_count) continue;
         if (last_block != NULL) {
           normal_block = last_block;
           last_block = NULL;  // Cleared to indicate we've handled it.
