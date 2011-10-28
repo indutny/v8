@@ -2786,6 +2786,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
             new(zone()) HCompareGeneric(context, tag_value, label_value,
                                         Token::EQ_STRICT);
         AddInstruction(result);
+        AddSimulate(stmt->EntryId());
 
         compare = new(zone())
             HCompareObjectEqAndBranch(result, graph()->GetConstantTrue());
