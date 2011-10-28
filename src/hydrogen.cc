@@ -2821,10 +2821,18 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // translating the clause bodies.
   HBasicBlock* curr_test_block = first_test_block;
   HBasicBlock* fall_through_block = NULL;
+  HBasicBlock* fall_through_block_left = NULL;
+
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
-    for (int i = 0; i < clause_count; ++i) {
-      CaseClause* clause = clauses->at(i);
+    for (int i = 0; i < iterations; ++i) {
+      // Create shadow last block for second pass
+      if (i == clause_count) {
+        fall_through_block_left = fall_through_block;
+        fall_through_block = NULL;
+      }
+
+      CaseClause* clause = clauses->at(i % clause_count);
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.
@@ -2867,34 +2875,12 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       fall_through_block = current_block();
     }
 
-    // Go through left comparisons and link their bodies to previous bodies
-    if (switch_type == STRING_SWITCH) {
+  }
 
-      HBasicBlock* parallel_test_block = first_test_block;
-
-      for (int i = clause_count; i < iterations; ++i) {
-        CaseClause* clause = clauses->at(i - clause_count);
-
-        // No need to link default
-        if (clause->is_default()) continue;
-
-        HBasicBlock* normal_block = NULL;
-        HBasicBlock* parallel_block = NULL;
-
-        if (!curr_test_block->end()->IsDeoptimize() &&
-            !parallel_test_block->end()->IsDeoptimize()) {
-          normal_block = curr_test_block->end()->FirstSuccessor();
-          curr_test_block = curr_test_block->end()->SecondSuccessor();
-
-          parallel_block = parallel_test_block->end()->FirstSuccessor();
-          parallel_test_block = parallel_test_block->end()->SecondSuccessor();
-        }
-
-        if (normal_block != NULL && parallel_block != NULL) {
-          normal_block->Goto(parallel_block);
-        }
-      }
-    }
+  // Join tails of parallel branches
+  if (fall_through_block != NULL && fall_through_block_left != NULL) {
+    fall_through_block = CreateJoin(fall_through_block, fall_through_block_left,
+                                    stmt->ExitId());
   }
 
   // Create an up-to-3-way join.  Use the break block if it exists since
