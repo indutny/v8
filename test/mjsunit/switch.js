@@ -149,6 +149,20 @@ assertEquals(3, f4_string('_two'.slice(1), 2), "fallthrough-string-switch.5");
 // Oddball
 assertEquals(3, f4_string(null, 3), "fallthrough-string-switch.6");
 
+// Test for regression
+function regress_string(value) {
+  var json = 1;
+  switch (typeof value) {
+    case 'object':
+      break;
+
+    default:
+
+  }
+  return json;
+};
+assertEquals(1, regress_string('object'), 'regression-string');
+
 function f5(x) {
   switch(x) {
      case -2: return true;

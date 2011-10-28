@@ -2869,20 +2869,13 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
       CHECK_BAILOUT(VisitStatements(clause->statements()));
       fall_through_block = current_block();
-
-      if (fall_through_block == NULL) {
-        // XXX This happens due some error in BreakableStatement
-        return Bailout("SwitchStatement: non-optimizable");
-      }
     }
 
   }
 
   // Join tails of parallel branches
-  if (fall_through_block != NULL && fall_through_block_left != NULL) {
-    fall_through_block = CreateJoin(fall_through_block, fall_through_block_left,
-                                    stmt->ExitId());
-  }
+  fall_through_block = CreateJoin(fall_through_block, fall_through_block_left,
+                                  stmt->ExitId());
 
   // Create an up-to-3-way join.  Use the break block if it exists since
   // it's already a join block.
