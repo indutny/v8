@@ -230,6 +230,13 @@ void LIsObjectAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
+void LIsStringAndBranch::PrintDataTo(StringStream* stream) {
+  stream->Add("if is_string(");
+  InputAt(0)->PrintTo(stream);
+  stream->Add(") then B%d else B%d", true_block_id(), false_block_id());
+}
+
+
 void LIsSmiAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if is_smi(");
   InputAt(0)->PrintTo(stream);
