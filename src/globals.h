@@ -358,6 +358,16 @@ F FUNCTION_CAST(Address addr) {
 class FreeStoreAllocationPolicy;
 template <typename T, class P = FreeStoreAllocationPolicy> class List;
 
+// -----------------------------------------------------------------------------
+// Declarations for use in both the preparser and the rest of V8.
+
+// The Strict Mode (ECMA-262 5th edition, 4.2.2).
+enum StrictModeFlag {
+  kNonStrictMode,
+  kStrictMode
+};
+
+
 } }  // namespace v8::internal
 
 #endif  // V8_GLOBALS_H_

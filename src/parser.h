@@ -76,7 +76,11 @@ class FunctionEntry BASE_EMBEDDED {
   int end_pos() { return backing_[kEndPosOffset]; }
   int literal_count() { return backing_[kLiteralCountOffset]; }
   int property_count() { return backing_[kPropertyCountOffset]; }
-  bool strict_mode() { return backing_[kStrictModeOffset] != 0; }
+  StrictModeFlag strict_mode_flag() {
+    ASSERT(backing_[kStrictModeOffset] == kStrictMode ||
+           backing_[kStrictModeOffset] == kNonStrictMode);
+    return static_cast<StrictModeFlag>(backing_[kStrictModeOffset]);
+  }
 
   bool is_valid() { return backing_.length() > 0; }
 

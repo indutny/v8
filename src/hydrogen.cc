@@ -2696,7 +2696,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     return Bailout("SwitchStatement: too many clauses");
   }
 
-  // HValue* context = environment()->LookupContext();
+  HValue* context = environment()->LookupContext();
 
   CHECK_ALIVE(VisitForValue(stmt->tag()));
   AddSimulate(stmt->EntryId());
@@ -2740,13 +2740,11 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     current_block()->Finish(oddball_check);
 
     set_current_block(first_test_block);
-
-    AddInstruction(HCheckInstanceType::NewIsSymbol(tag_value));
   }
 
   // 2. Build all the tests, with dangling true branches
-  for (int i = 0; i < clause_count; ++i) {
-    CaseClause* clause = clauses->at(i);
+  for (int i = 0; i < 2 * clause_count; ++i) {
+    CaseClause* clause = clauses->at(i % clause_count);
     if (clause->is_default()) continue;
 
     clause->RecordTypeFeedback(oracle());
@@ -2776,7 +2774,17 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
-      compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
+      if (i < clause_count) {
+        compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
+      } else {
+        HCompareGeneric* result =
+            new(zone()) HCompareGeneric(context, tag_value, label_value,
+                                        Token::EQ_STRICT);
+        AddInstruction(result);
+
+        compare = new(zone())
+            HCompareObjectEqAndBranch(result, graph()->GetConstantTrue());
+      }
     }
 
     compare->SetSuccessorAt(0, body_block);
@@ -2792,7 +2800,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
   if (oddball_block != NULL) {
     if (last_block != NULL) {
-      last_block = CreateJoin(last_block, oddball_block, -1);
+      last_block = CreateJoin(last_block, oddball_block, stmt->ExitId());
+      oddball_block->Goto(last_block);
     } else {
       oddball_block->Goto(first_test_block);
     }
@@ -2804,13 +2813,14 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HBasicBlock* fall_through_block = NULL;
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
-    for (int i = 0; i < clause_count; ++i) {
-      CaseClause* clause = clauses->at(i);
+    for (int i = 0; i < clause_count * 2; ++i) {
+      CaseClause* clause = clauses->at(i % clause_count);
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.
       HBasicBlock* normal_block = NULL;
       if (clause->is_default()) {
+        if (i < clause_count) continue;
         if (last_block != NULL) {
           normal_block = last_block;
           last_block = NULL;  // Cleared to indicate we've handled it.
@@ -5190,11 +5200,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
         call = PreProcessCall(new(zone()) HInvokeFunction(context,
                                                           function,
                                                           argument_count));
-        call->set_position(expr->position());
-        AddInstruction(call);
-        AddSimulate(expr->id());
         Drop(1);  // The function.
-        return ast_context()->ReturnValue(call);
       }
 
     } else {

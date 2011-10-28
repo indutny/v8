@@ -106,6 +106,16 @@ namespace internal {
   type name = NumberTo##Type(obj);
 
 
+// Assert that the given argument has a valid value for a StrictModeFlag
+// and store it in a StrictModeFlag variable with the given name.
+#define CONVERT_STRICT_MODE_ARG(name, index)                         \
+  ASSERT(args[index]->IsSmi());                                      \
+  ASSERT(args.smi_at(index) == kStrictMode ||                        \
+         args.smi_at(index) == kNonStrictMode);                      \
+  StrictModeFlag name =                                              \
+      static_cast<StrictModeFlag>(args.smi_at(index));
+
+
 MUST_USE_RESULT static MaybeObject* DeepCopyBoilerplate(Isolate* isolate,
                                                    JSObject* boilerplate) {
   StackLimitCheck check(isolate);
@@ -1515,8 +1525,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InitializeVarGlobal) {
   CONVERT_ARG_CHECKED(String, name, 0);
   GlobalObject* global = isolate->context()->global();
   RUNTIME_ASSERT(args[1]->IsSmi());
-  StrictModeFlag strict_mode = static_cast<StrictModeFlag>(args.smi_at(1));
-  ASSERT(strict_mode == kStrictMode || strict_mode == kNonStrictMode);
+  CONVERT_STRICT_MODE_ARG(strict_mode, 1);
 
   // According to ECMA-262, section 12.2, page 62, the property must
   // not be deletable.
@@ -4594,10 +4603,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetProperty) {
 
   StrictModeFlag strict_mode = kNonStrictMode;
   if (args.length() == 5) {
-    CONVERT_SMI_ARG_CHECKED(strict_unchecked, 4);
-    RUNTIME_ASSERT(strict_unchecked == kStrictMode ||
-                   strict_unchecked == kNonStrictMode);
-    strict_mode = static_cast<StrictModeFlag>(strict_unchecked);
+    CONVERT_STRICT_MODE_ARG(strict_mode_flag, 4);
+    strict_mode = strict_mode_flag;
   }
 
   return Runtime::SetObjectProperty(isolate,
@@ -7490,7 +7497,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_Math_tan) {
 }
 
 
-static int MakeDay(int year, int month, int day) {
+static int MakeDay(int year, int month) {
   static const int day_from_month[] = {0, 31, 59, 90, 120, 151,
                                        181, 212, 243, 273, 304, 334};
   static const int day_from_month_leap[] = {0, 31, 60, 91, 121, 152,
@@ -7527,23 +7534,22 @@ static int MakeDay(int year, int month, int day) {
                       year1 / 400 -
                       base_day;
 
-  if (year % 4 || (year % 100 == 0 && year % 400 != 0)) {
-    return day_from_year + day_from_month[month] + day - 1;
+  if ((year % 4 != 0) || (year % 100 == 0 && year % 400 != 0)) {
+    return day_from_year + day_from_month[month];
   }
 
-  return day_from_year + day_from_month_leap[month] + day - 1;
+  return day_from_year + day_from_month_leap[month];
 }
 
 
 RUNTIME_FUNCTION(MaybeObject*, Runtime_DateMakeDay) {
   NoHandleAllocation ha;
-  ASSERT(args.length() == 3);
+  ASSERT(args.length() == 2);
 
   CONVERT_SMI_ARG_CHECKED(year, 0);
   CONVERT_SMI_ARG_CHECKED(month, 1);
-  CONVERT_SMI_ARG_CHECKED(date, 2);
 
-  return Smi::FromInt(MakeDay(year, month, date));
+  return Smi::FromInt(MakeDay(year, month));
 }
 
 
@@ -7772,7 +7778,7 @@ static inline void DateYMDFromTimeAfter1970(int date,
   month = kMonthInYear[date];
   day = kDayInYear[date];
 
-  ASSERT(MakeDay(year, month, day) == save_date);
+  ASSERT(MakeDay(year, month) + day - 1 == save_date);
 }
 
 
@@ -7786,7 +7792,7 @@ static inline void DateYMDFromTimeSlow(int date,
   year = 400 * (date / kDaysIn400Years) - kYearsOffset;
   date %= kDaysIn400Years;
 
-  ASSERT(MakeDay(year, 0, 1) + date == save_date);
+  ASSERT(MakeDay(year, 0) + date == save_date);
 
   date--;
   int yd1 = date / kDaysIn100Years;
@@ -7809,8 +7815,8 @@ static inline void DateYMDFromTimeSlow(int date,
   ASSERT(is_leap || (date >= 0));
   ASSERT((date < 365) || (is_leap && (date < 366)));
   ASSERT(is_leap == ((year % 4 == 0) && (year % 100 || (year % 400 == 0))));
-  ASSERT(is_leap || ((MakeDay(year, 0, 1) + date) == save_date));
-  ASSERT(!is_leap || ((MakeDay(year, 0, 1) + date + 1) == save_date));
+  ASSERT(is_leap || ((MakeDay(year, 0) + date) == save_date));
+  ASSERT(!is_leap || ((MakeDay(year, 0) + date + 1) == save_date));
 
   if (is_leap) {
     day = kDayInYear[2*365 + 1 + date];
@@ -7820,7 +7826,7 @@ static inline void DateYMDFromTimeSlow(int date,
     month = kMonthInYear[date];
   }
 
-  ASSERT(MakeDay(year, month, day) == save_date);
+  ASSERT(MakeDay(year, month) + day - 1 == save_date);
 }
 
 
@@ -9012,10 +9018,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StoreContextSlot) {
   Handle<Object> value(args[0], isolate);
   CONVERT_ARG_CHECKED(Context, context, 1);
   CONVERT_ARG_CHECKED(String, name, 2);
-  CONVERT_SMI_ARG_CHECKED(strict_unchecked, 3);
-  RUNTIME_ASSERT(strict_unchecked == kStrictMode ||
-                 strict_unchecked == kNonStrictMode);
-  StrictModeFlag strict_mode = static_cast<StrictModeFlag>(strict_unchecked);
+  CONVERT_STRICT_MODE_ARG(strict_mode, 3);
 
   int index;
   PropertyAttributes attributes;
@@ -9488,11 +9491,11 @@ RUNTIME_FUNCTION(ObjectPair, Runtime_ResolvePossiblyDirectEval) {
     return MakePair(*callee, isolate->heap()->the_hole_value());
   }
 
-  ASSERT(args[3]->IsSmi());
+  CONVERT_STRICT_MODE_ARG(strict_mode, 3);
   return CompileGlobalEval(isolate,
                            args.at<String>(1),
                            args.at<Object>(2),
-                           static_cast<StrictModeFlag>(args.smi_at(3)));
+                           strict_mode);
 }
 
 
@@ -9509,11 +9512,11 @@ RUNTIME_FUNCTION(ObjectPair, Runtime_ResolvePossiblyDirectEvalNoLookup) {
     return MakePair(*callee, isolate->heap()->the_hole_value());
   }
 
-  ASSERT(args[3]->IsSmi());
+  CONVERT_STRICT_MODE_ARG(strict_mode, 3);
   return CompileGlobalEval(isolate,
                            args.at<String>(1),
                            args.at<Object>(2),
-                           static_cast<StrictModeFlag>(args.smi_at(3)));
+                           strict_mode);
 }
 
 
