@@ -2806,7 +2806,6 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   if (oddball_block != NULL) {
     if (last_block != NULL) {
       last_block = CreateJoin(last_block, oddball_block, stmt->ExitId());
-      oddball_block->Goto(last_block);
 
       // And replace last_block with new
       HBasicBlock* fall_through_patch = graph()->CreateBasicBlock();
