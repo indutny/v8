@@ -734,6 +734,7 @@ void HGraph::Postorder(HBasicBlock* block,
       Postorder(it.Current(), visited, order, block);
     }
   } else {
+    ASSERT(block->IsFinished());
     for (HSuccessorIterator it(block->end()); !it.Done(); it.Advance()) {
       Postorder(it.Current(), visited, order, loop_header);
     }
@@ -2868,6 +2869,11 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
       CHECK_BAILOUT(VisitStatements(clause->statements()));
       fall_through_block = current_block();
+
+      if (fall_through_block == NULL) {
+        // XXX This happens due some error in BreakableStatement
+        return Bailout("SwitchStatement: non-optimizable");
+      }
     }
 
   }
