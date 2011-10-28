@@ -2800,6 +2800,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
   if (oddball_block != NULL) {
     if (last_block != NULL) {
+      last_block = CreateJoin(last_block, oddball_block, stmt->ExitId());
       oddball_block->Goto(last_block);
     } else {
       oddball_block->Goto(first_test_block);
