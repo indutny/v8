@@ -2736,15 +2736,6 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     // We'll generate two passes of checks
     iterations = iterations * 2;
 
-    // But we can't process `default` clause correctly
-    for (int i = 0; i < clause_count; ++i) {
-      CaseClause* clause = clauses->at(i);
-      if (clause->is_default()) {
-        return Bailout("SwitchStatement: default clause in string switch is "
-                       "not supported");
-      }
-    }
-
     oddball_check = new (zone()) HIsStringAndBranch(tag_value);
     first_test_block = graph()->CreateBasicBlock();
     oddball_block = graph()->CreateBasicBlock();
@@ -2832,20 +2823,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HBasicBlock* fall_through_block = NULL;
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
-    for (int i = 0; i < iterations; ++i) {
-      // We're starting processing second pass of comparisons
-      // If we have hanging fall_through block attach it to exit point
-      if (i == clause_count && fall_through_block != NULL) {
-        fall_through_block->Goto(last_block);
-        fall_through_block = NULL;
-
-        // And replace last_block with new
-        HBasicBlock* fall_through_patch = graph()->CreateBasicBlock();
-        last_block->Goto(fall_through_patch);
-        last_block = fall_through_patch;
-      }
-
-      CaseClause* clause = clauses->at(i % clause_count);
+    for (int i = 0; i < clause_count; ++i) {
+      CaseClause* clause = clauses->at(i);
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.
@@ -2886,6 +2865,35 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
       CHECK_BAILOUT(VisitStatements(clause->statements()));
       fall_through_block = current_block();
+    }
+
+    // Go through left comparisons and link their bodies to previous bodies
+    if (switch_type == STRING_SWITCH) {
+
+      HBasicBlock* parallel_test_block = first_test_block;
+
+      for (int i = clause_count; i < iterations; ++i) {
+        CaseClause* clause = clauses->at(i - clause_count);
+
+        // No need to link default
+        if (clause->is_default()) continue;
+
+        HBasicBlock* normal_block = NULL;
+        HBasicBlock* parallel_block = NULL;
+
+        if (!curr_test_block->end()->IsDeoptimize() &&
+            !parallel_test_block->end()->IsDeoptimize()) {
+          normal_block = curr_test_block->end()->FirstSuccessor();
+          curr_test_block = curr_test_block->end()->SecondSuccessor();
+
+          parallel_block = parallel_test_block->end()->FirstSuccessor();
+          parallel_test_block = parallel_test_block->end()->SecondSuccessor();
+        }
+
+        if (normal_block != NULL && parallel_block != NULL) {
+          normal_block->Goto(parallel_block);
+        }
+      }
     }
   }
 
