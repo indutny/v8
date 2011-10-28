@@ -2729,8 +2729,22 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HUnaryControlInstruction* oddball_check = NULL;
   HBasicBlock* oddball_block = NULL;
 
+  int iterations = clause_count;
+
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
+    // We'll generate two passes of checks
+    iterations = iterations * 2;
+
+    // But we can't process `default` clause correctly
+    for (int i = 0; i < clause_count; ++i) {
+      CaseClause* clause = clauses->at(i);
+      if (clause->is_default()) {
+        return Bailout("SwitchStatement: default clause in string switch is "
+                       "not supported");
+      }
+    }
+
     oddball_check = new (zone()) HIsStringAndBranch(tag_value);
     first_test_block = graph()->CreateBasicBlock();
     oddball_block = graph()->CreateBasicBlock();
@@ -2743,7 +2757,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   }
 
   // 2. Build all the tests, with dangling true branches
-  for (int i = 0; i < 2 * clause_count; ++i) {
+  for (int i = 0; i < iterations; ++i) {
     CaseClause* clause = clauses->at(i % clause_count);
     if (clause->is_default()) continue;
 
@@ -2802,6 +2816,11 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     if (last_block != NULL) {
       last_block = CreateJoin(last_block, oddball_block, stmt->ExitId());
       oddball_block->Goto(last_block);
+
+      // And replace last_block with new
+      HBasicBlock* fall_through_patch = graph()->CreateBasicBlock();
+      last_block->Goto(fall_through_patch);
+      last_block = fall_through_patch;
     } else {
       oddball_block->Goto(first_test_block);
     }
@@ -2813,14 +2832,25 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HBasicBlock* fall_through_block = NULL;
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
-    for (int i = 0; i < clause_count * 2; ++i) {
+    for (int i = 0; i < iterations; ++i) {
+      // We're starting processing second pass of comparisons
+      // If we have hanging fall_through block attach it to exit point
+      if (i == clause_count && fall_through_block != NULL) {
+        fall_through_block->Goto(last_block);
+        fall_through_block = NULL;
+
+        // And replace last_block with new
+        HBasicBlock* fall_through_patch = graph()->CreateBasicBlock();
+        last_block->Goto(fall_through_patch);
+        last_block = fall_through_patch;
+      }
+
       CaseClause* clause = clauses->at(i % clause_count);
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.
       HBasicBlock* normal_block = NULL;
       if (clause->is_default()) {
-        if (i < clause_count) continue;
         if (last_block != NULL) {
           normal_block = last_block;
           last_block = NULL;  // Cleared to indicate we've handled it.
