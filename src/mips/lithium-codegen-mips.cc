@@ -1728,6 +1728,36 @@ void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
 }
 
 
+Condition LCodeGen::EmitIsObject(Register input,
+                                 Register temp1,
+                                 Label* is_not_object,
+                                 Label* is_object) {
+  __ JumpIfSmi(input, &is_not_string);
+  __ GetObjectType(input, temp1, temp1);
+  __ Branch(&is_not_string, ge, temp1, Operand(FIRST_NONSTRING_TYPE));
+
+  return l;
+}
+
+
+void LCodeGen::DoIsStringAndBranch(LIsStringAndBranch* instr) {
+  Register reg = ToRegister(instr->InputAt(0));
+  Register temp1 = ToRegister(instr->TempAt(0));
+  Register temp2 = scratch0();
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+  Label* true_label = chunk_->GetAssemblyLabel(true_block);
+  Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+  Condition true_cond =
+      EmitIsString(reg, temp1, false_label, true_label);
+
+  EmitBranch(true_block, false_block, true_cond, temp2,
+             Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
+}
+
+
 void LCodeGen::DoIsSmiAndBranch(LIsSmiAndBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());

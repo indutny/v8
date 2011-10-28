@@ -228,6 +228,13 @@ void LIsObjectAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
+void LIsStringAndBranch::PrintDataTo(StringStream* stream) {
+  stream->Add("if is_string(");
+  InputAt(0)->PrintTo(stream);
+  stream->Add(") then B%d else B%d", true_block_id(), false_block_id());
+}
+
+
 void LIsSmiAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if is_smi(");
   InputAt(0)->PrintTo(stream);
@@ -1415,7 +1422,7 @@ LInstruction* LChunkBuilder::DoCompareGeneric(HCompareGeneric* instr) {
   LOperand* left = UseFixed(instr->left(), a1);
   LOperand* right = UseFixed(instr->right(), a0);
   LCmpT* result = new LCmpT(left, right);
-  return MarkAsCall(DefineFixed(result, v0), instr);
+  return AddEnvironment(MarkAsCall(DefineFixed(result, v0), instr));
 }
 
 
@@ -1463,6 +1470,13 @@ LInstruction* LChunkBuilder::DoIsObjectAndBranch(HIsObjectAndBranch* instr) {
   ASSERT(instr->value()->representation().IsTagged());
   LOperand* temp = TempRegister();
   return new LIsObjectAndBranch(UseRegisterAtStart(instr->value()), temp);
+}
+
+
+LInstruction* LChunkBuilder::DoIsStringAndBranch(HIsStringAndBranch* instr) {
+  ASSERT(instr->value()->representation().IsTagged());
+  LOperand* temp = TempRegister();
+  return new LIsStringAndBranch(UseRegisterAtStart(instr->value()), temp);
 }
 
 
