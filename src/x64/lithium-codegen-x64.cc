@@ -1684,9 +1684,8 @@ Condition LCodeGen::EmitIsString(Register input,
                                  Label* is_not_string,
                                  Label* is_string) {
 
-  __ JumpIfSmi(input, &is_not_string, Label::kNear);
+  __ JumpIfSmi(input, is_not_string);
   __ CmpObjectType(input, FIRST_NONSTRING_TYPE, rcx);
-  __ j(above_equal, &is_not_string, Label::kNear);
 
   return below;
 }
