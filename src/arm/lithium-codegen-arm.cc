@@ -1862,10 +1862,10 @@ Condition LCodeGen::EmitIsString(Register input,
                                  Register temp1,
                                  Label* is_not_string,
                                  Label* is_string) {
-  __ JumpIfSmi(left, &is_not_string);
-  __ CompareObjectType(left, temp1, temp1, FIRST_NONSTRING_TYPE);
+  __ JumpIfSmi(input, is_not_string);
+  __ CompareObjectType(input, temp1, temp1, FIRST_NONSTRING_TYPE);
 
-  return l;
+  return lt;
 }
 
 

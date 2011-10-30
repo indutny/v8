@@ -1728,15 +1728,15 @@ void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
 }
 
 
-Condition LCodeGen::EmitIsObject(Register input,
+Condition LCodeGen::EmitIsString(Register input,
                                  Register temp1,
-                                 Label* is_not_object,
-                                 Label* is_object) {
-  __ JumpIfSmi(input, &is_not_string);
+                                 Label* is_not_string,
+                                 Label* is_string) {
+  __ JumpIfSmi(input, is_not_string);
   __ GetObjectType(input, temp1, temp1);
-  __ Branch(&is_not_string, ge, temp1, Operand(FIRST_NONSTRING_TYPE));
+  __ Branch(is_not_string, ge, temp1, Operand(FIRST_NONSTRING_TYPE));
 
-  return l;
+  return lt;
 }
 
 
