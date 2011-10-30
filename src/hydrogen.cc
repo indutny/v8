@@ -2865,7 +2865,6 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       CHECK_BAILOUT(VisitStatements(clause->statements()));
       fall_through_block = current_block();
     }
-
   }
 
   // Join tails of parallel branches

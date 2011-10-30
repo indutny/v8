@@ -1552,7 +1552,6 @@ LInstruction* LChunkBuilder::DoCompareGenericAndBranch(
   LCompareGenericAndBranch* result = new
       LCompareGenericAndBranch(context, left, right);
 
-  // XXX Do we need DefineFixed wrapper here?
   return AssignEnvironment(MarkAsCall(result, instr));
 }
 

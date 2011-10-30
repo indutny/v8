@@ -251,6 +251,14 @@ void LIsUndetectableAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
+void LCompareGenericAndBranch::PrintDataTo(StringStream* stream) {
+  stream->Add("if compare_generic(");
+  InputAt(0)->PrintTo(stream);
+  InputAt(1)->PrintTo(stream);
+  stream->Add(") then B%d else B%d", true_block_id(), false_block_id());
+}
+
+
 void LHasInstanceTypeAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if has_instance_type(");
   InputAt(0)->PrintTo(stream);
@@ -1489,6 +1497,19 @@ LInstruction* LChunkBuilder::DoIsUndetectableAndBranch(
   ASSERT(instr->value()->representation().IsTagged());
   return new LIsUndetectableAndBranch(UseRegisterAtStart(instr->value()),
                                       TempRegister());
+}
+
+
+LInstruction* LChunkBuilder::DoCompareGenericAndBranch(
+    HCompareGenericAndBranch* instr) {
+
+  ASSERT(instr->left()->representation().IsTagged());
+  ASSERT(instr->right()->representation().IsTagged());
+  LOperand* left = UseFixed(instr->left(), rdx);
+  LOperand* right = UseFixed(instr->right(), rax);
+  LCompareGenericAndBranch* result = new LCompareGenericAndBranch(left, right);
+
+  return AssignEnvironment(MarkAsCall(result, instr));
 }
 
 
