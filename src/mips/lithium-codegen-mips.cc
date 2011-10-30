@@ -1783,6 +1783,42 @@ void LCodeGen::DoIsUndetectableAndBranch(LIsUndetectableAndBranch* instr) {
 }
 
 
+static Condition ComputeCompareCondition(Token::Value op) {
+  switch (op) {
+    case Token::EQ_STRICT:
+    case Token::EQ:
+      return eq;
+    case Token::LT:
+      return lt;
+    case Token::GT:
+      return gt;
+    case Token::LTE:
+      return le;
+    case Token::GTE:
+      return ge;
+    default:
+      UNREACHABLE();
+      return kNoCondition;
+  }
+}
+
+
+void LCodeGen::DoCompareGenericAndBranch(LCompareGenericAndBranch* instr) {
+  Token::Value op = instr->op();
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  Handle<Code> ic = CompareIC::GetUninitialized(op);
+  CallCode(ic, RelocInfo::CODE_TARGET, instr);
+  // On MIPS there is no need for a "no inlined smi code" marker (nop).
+
+  Condition condition = ComputeCompareCondition(op);
+
+  EmitBranch(true_block, false_block, condition, at,
+             Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
+}
+
+
 static InstanceType TestType(HHasInstanceTypeAndBranch* instr) {
   InstanceType from = instr->from();
   InstanceType to = instr->to();
@@ -2077,26 +2113,6 @@ void LCodeGen::DoDeferredLInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   // Put the result value into the result register slot and
   // restore all registers.
   __ StoreToSafepointRegisterSlot(result, result);
-}
-
-
-static Condition ComputeCompareCondition(Token::Value op) {
-  switch (op) {
-    case Token::EQ_STRICT:
-    case Token::EQ:
-      return eq;
-    case Token::LT:
-      return lt;
-    case Token::GT:
-      return gt;
-    case Token::LTE:
-      return le;
-    case Token::GTE:
-      return ge;
-    default:
-      UNREACHABLE();
-      return kNoCondition;
-  }
 }
 
 
