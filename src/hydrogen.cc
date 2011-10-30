@@ -2737,7 +2737,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     // We'll generate two passes of checks
     iterations = iterations * 2;
 
-    oddball_check = new (zone()) HIsStringAndBranch(tag_value);
+    oddball_check = new(zone()) HIsStringAndBranch(tag_value);
     first_test_block = graph()->CreateBasicBlock();
     oddball_block = graph()->CreateBasicBlock();
 
@@ -2783,14 +2783,9 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       if (i < clause_count) {
         compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
       } else {
-        HCompareGeneric* result =
-            new(zone()) HCompareGeneric(context, tag_value, label_value,
-                                        Token::EQ_STRICT);
-        AddInstruction(result);
-        AddSimulate(stmt->EntryId());
-
-        compare = new(zone())
-            HCompareObjectEqAndBranch(result, graph()->GetConstantTrue());
+        compare = new(zone()) HCompareGenericAndBranch(context, tag_value,
+                                                       label_value,
+                                                       Token::EQ_STRICT);
       }
     }
 
