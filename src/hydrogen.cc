@@ -2801,11 +2801,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HBasicBlock* last_block = current_block();
 
   if (oddball_block != NULL) {
-    if (last_block != NULL) {
-      last_block = CreateJoin(last_block, oddball_block, stmt->ExitId());
-    } else {
-      oddball_block->Goto(first_test_block);
-    }
+    last_block = CreateJoin(last_block, oddball_block, stmt->ExitId());
   }
 
   // 3. Loop over the clauses and the linked list of tests in lockstep,
