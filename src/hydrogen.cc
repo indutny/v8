@@ -2739,23 +2739,35 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     }
   }
 
-  HUnaryControlInstruction* oddball_check = NULL;
-  HBasicBlock* oddball_block = NULL;
+  HUnaryControlInstruction* string_check = NULL;
+  HBasicBlock* not_string_block = NULL;
 
   int iterations = clause_count;
 
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
+    // Bailout if we seen string(non-symbol) comparisons here
+    for (int i = 0; i < clause_count; ++i) {
+      CaseClause* clause = clauses->at(i);
+      if (clause->is_default()) continue;
+
+      clause->RecordTypeFeedback(oracle());
+
+      if (clause->IsStringCompare()) {
+        return Bailout("SwitchStatement: no symbol comparisons expected");
+      }
+    }
+
     // We'll generate two passes of checks
     iterations = iterations * 2;
 
-    oddball_check = new(zone()) HIsStringAndBranch(tag_value);
+    string_check = new(zone()) HIsStringAndBranch(tag_value);
     first_test_block = graph()->CreateBasicBlock();
-    oddball_block = graph()->CreateBasicBlock();
+    not_string_block = graph()->CreateBasicBlock();
 
-    oddball_check->SetSuccessorAt(0, first_test_block);
-    oddball_check->SetSuccessorAt(1, oddball_block);
-    current_block()->Finish(oddball_check);
+    string_check->SetSuccessorAt(0, first_test_block);
+    string_check->SetSuccessorAt(1, not_string_block);
+    current_block()->Finish(string_check);
 
     set_current_block(first_test_block);
   }
@@ -2765,7 +2777,9 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     CaseClause* clause = clauses->at(i % clause_count);
     if (clause->is_default()) continue;
 
-    clause->RecordTypeFeedback(oracle());
+    if (switch_type == SMI_SWITCH) {
+      clause->RecordTypeFeedback(oracle());
+    }
 
     // Generate a compare and branch.
     CHECK_ALIVE(VisitForValue(clause->label()));
@@ -2812,8 +2826,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // exit.  This block is NULL if we deoptimized.
   HBasicBlock* last_block = current_block();
 
-  if (oddball_block != NULL) {
-    last_block = CreateJoin(last_block, oddball_block, stmt->ExitId());
+  if (not_string_block != NULL) {
+    last_block = CreateJoin(last_block, not_string_block, stmt->ExitId());
   }
 
   // 3. Loop over the clauses and the linked list of tests in lockstep,

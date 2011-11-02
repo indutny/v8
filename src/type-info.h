@@ -144,6 +144,11 @@ class TypeInfo {
     return ((type_ & kSymbol) == kSymbol);
   }
 
+  inline bool IsNonSymbol() {
+    ASSERT(type_ != kUninitialized);
+    return ((type_ & kSymbol) == kString);
+  }
+
   inline bool IsInteger32() {
     ASSERT(type_ != kUninitialized);
     return ((type_ & kInteger32) == kInteger32);
