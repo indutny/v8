@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,10 +25,50 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that direct eval calls handle the case where eval has been
-// deleted correctly.
+// Flags: --allow-natives-syntax --smi-only-arrays
 
-// See http://code.google.com/p/v8/issues/detail?id=221
+function burn() {
+  var a = new Array(3);
+  a[0] = 10;
+  a[1] = 15.5;
+  a[2] = 20;
+  return a;
+}
 
-assertThrows('eval(delete eval)');
+function check(a) {
+  assertEquals(10, a[0]);
+  assertEquals(15.5, a[1]);
+  assertEquals(20, a[2]);
+}
 
+var b;
+for (var i = 0; i < 3; ++i) {
+  b = burn();
+  check(b);  // all OK
+}
+%OptimizeFunctionOnNextCall(burn);
+b = burn();
+check(b);  // fails
+
+
+function loop_test(x) {
+  for (i=0;i<3;i++) {
+    x[i] = (i+1) * 0.5;
+  }
+}
+
+function check2(b) {
+  assertEquals(0.5, b[0]);
+  assertEquals(1.0, b[1]);
+  assertEquals(1.5, b[2]);
+}
+
+for (var i = 0; i < 3; ++i) {
+  b = [0,1,2];
+  loop_test(b);
+  check2(b);
+}
+%OptimizeFunctionOnNextCall(loop_test);
+b = [0,1,2];
+loop_test(b);
+check2(b);

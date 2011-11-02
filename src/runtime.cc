@@ -4689,6 +4689,44 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetNativeFlag) {
 }
 
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_StoreArrayLiteralElement) {
+  RUNTIME_ASSERT(args.length() == 5);
+  CONVERT_ARG_CHECKED(JSObject, object, 0);
+  CONVERT_SMI_ARG_CHECKED(store_index, 1);
+  Handle<Object> value = args.at<Object>(2);
+  CONVERT_ARG_CHECKED(FixedArray, literals, 3);
+  CONVERT_SMI_ARG_CHECKED(literal_index, 4);
+  HandleScope scope;
+
+  Object* raw_boilerplate_object = literals->get(literal_index);
+  Handle<JSArray> boilerplate_object(JSArray::cast(raw_boilerplate_object));
+#if DEBUG
+  ElementsKind elements_kind = object->GetElementsKind();
+#endif
+  ASSERT(elements_kind <= FAST_DOUBLE_ELEMENTS);
+  // Smis should never trigger transitions.
+  ASSERT(!value->IsSmi());
+
+  if (value->IsNumber()) {
+    ASSERT(elements_kind == FAST_SMI_ONLY_ELEMENTS);
+    TransitionElementsKind(object, FAST_DOUBLE_ELEMENTS);
+    ASSERT(object->GetElementsKind() == FAST_DOUBLE_ELEMENTS);
+    FixedDoubleArray* double_array =
+        FixedDoubleArray::cast(object->elements());
+    HeapNumber* number = HeapNumber::cast(*value);
+    double_array->set(store_index, number->Number());
+  } else {
+    ASSERT(elements_kind == FAST_SMI_ONLY_ELEMENTS ||
+           elements_kind == FAST_DOUBLE_ELEMENTS);
+    TransitionElementsKind(object, FAST_ELEMENTS);
+    FixedArray* object_array =
+        FixedArray::cast(object->elements());
+    object_array->set(store_index, *value);
+  }
+  return *object;
+}
+
+
 // Set a local property, even if it is READ_ONLY.  If the property does not
 // exist, it will be added with attributes NONE.
 RUNTIME_FUNCTION(MaybeObject*, Runtime_IgnoreAttributesAndSetProperty) {
@@ -7875,19 +7913,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DateYMDFromTime) {
 
   FixedArrayBase* elms_base = FixedArrayBase::cast(res_array->elements());
   RUNTIME_ASSERT(elms_base->length() == 3);
-  RUNTIME_ASSERT(res_array->GetElementsKind() <= FAST_DOUBLE_ELEMENTS);
+  RUNTIME_ASSERT(res_array->HasFastTypeElements());
 
-  if (res_array->HasFastDoubleElements()) {
-    FixedDoubleArray* elms = FixedDoubleArray::cast(res_array->elements());
-    elms->set(0, year);
-    elms->set(1, month);
-    elms->set(2, day);
-  } else {
-    FixedArray* elms = FixedArray::cast(res_array->elements());
-    elms->set(0, Smi::FromInt(year));
-    elms->set(1, Smi::FromInt(month));
-    elms->set(2, Smi::FromInt(day));
-  }
+  MaybeObject* maybe = res_array->EnsureWritableFastElements();
+  if (maybe->IsFailure()) return maybe;
+  FixedArray* elms = FixedArray::cast(res_array->elements());
+  elms->set(0, Smi::FromInt(year));
+  elms->set(1, Smi::FromInt(month));
+  elms->set(2, Smi::FromInt(day));
 
   return isolate->heap()->undefined_value();
 }
@@ -9452,80 +9485,12 @@ RUNTIME_FUNCTION(ObjectPair, Runtime_ResolvePossiblyDirectEval) {
 
   HandleScope scope(isolate);
   Handle<Object> callee = args.at<Object>(0);
-  Handle<Object> receiver;  // Will be overwritten.
 
-  // Compute the calling context.
-  Handle<Context> context = Handle<Context>(isolate->context(), isolate);
-#ifdef DEBUG
-  // Make sure Isolate::context() agrees with the old code that traversed
-  // the stack frames to compute the context.
-  StackFrameLocator locator;
-  JavaScriptFrame* frame = locator.FindJavaScriptFrame(0);
-  ASSERT(Context::cast(frame->context()) == *context);
-#endif
-
-  // Find where the 'eval' symbol is bound. It is unaliased only if
-  // it is bound in the global context.
-  int index = -1;
-  PropertyAttributes attributes = ABSENT;
-  BindingFlags binding_flags;
-  while (true) {
-    // Don't follow context chains in Context::Lookup and implement the loop
-    // up the context chain here, so that we can know the context where eval
-    // was found.
-    receiver = context->Lookup(isolate->factory()->eval_symbol(),
-                               FOLLOW_PROTOTYPE_CHAIN,
-                               &index,
-                               &attributes,
-                               &binding_flags);
-    // Stop search when eval is found or when the global context is
-    // reached.
-    if (attributes != ABSENT || context->IsGlobalContext()) break;
-    context = Handle<Context>(context->previous(), isolate);
-  }
-
-  // If eval could not be resolved, it has been deleted and we need to
-  // throw a reference error.
-  if (attributes == ABSENT) {
-    Handle<Object> name = isolate->factory()->eval_symbol();
-    Handle<Object> reference_error =
-        isolate->factory()->NewReferenceError("not_defined",
-                                              HandleVector(&name, 1));
-    return MakePair(isolate->Throw(*reference_error), NULL);
-  }
-
-  if (!context->IsGlobalContext()) {
-    // 'eval' is not bound in the global context. Just call the function
-    // with the given arguments. This is not necessarily the global eval.
-    if (receiver->IsContext() || receiver->IsJSContextExtensionObject()) {
-      receiver = isolate->factory()->the_hole_value();
-    }
-    return MakePair(*callee, *receiver);
-  }
-
-  // 'eval' is bound in the global context, but it may have been overwritten.
-  // Compare it to the builtin 'GlobalEval' function to make sure.
-  if (*callee != isolate->global_context()->global_eval_fun() ||
-      !args[1]->IsString()) {
-    return MakePair(*callee, isolate->heap()->the_hole_value());
-  }
-
-  CONVERT_STRICT_MODE_ARG(strict_mode, 3);
-  return CompileGlobalEval(isolate,
-                           args.at<String>(1),
-                           args.at<Object>(2),
-                           strict_mode);
-}
-
-
-RUNTIME_FUNCTION(ObjectPair, Runtime_ResolvePossiblyDirectEvalNoLookup) {
-  ASSERT(args.length() == 4);
-
-  HandleScope scope(isolate);
-  Handle<Object> callee = args.at<Object>(0);
-
-  // 'eval' is bound in the global context, but it may have been overwritten.
-  // Compare it to the builtin 'GlobalEval' function to make sure.
+  // If "eval" didn't refer to the original GlobalEval, it's not a
+  // direct call to eval.
+  // (And even if it is, but the first argument isn't a string, just let
+  // execution default to an indirect call to eval, which will also return
+  // the first argument without doing anything).
   if (*callee != isolate->global_context()->global_eval_fun() ||
       !args[1]->IsString()) {
     return MakePair(*callee, isolate->heap()->the_hole_value());

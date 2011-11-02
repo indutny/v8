@@ -194,8 +194,8 @@ class LInstruction: public ZoneObject {
   virtual void CompileToNative(LCodeGen* generator) = 0;
   virtual const char* Mnemonic() const = 0;
   virtual void PrintTo(StringStream* stream);
-  virtual void PrintDataTo(StringStream* stream) = 0;
-  virtual void PrintOutputOperandTo(StringStream* stream) = 0;
+  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintOutputOperandTo(StringStream* stream);
 
   enum Opcode {
     // Declare a unique enum value for each instruction.
@@ -290,9 +290,6 @@ class LTemplateInstruction: public LInstruction {
 
   int TempCount() { return T; }
   LOperand* TempAt(int i) { return temps_[i]; }
-
-  virtual void PrintDataTo(StringStream* stream);
-  virtual void PrintOutputOperandTo(StringStream* stream);
 
  protected:
   EmbeddedContainer<LOperand*, R> results_;
@@ -832,18 +829,15 @@ class LBoundsCheck: public LTemplateInstruction<0, 2, 0> {
 
 class LBitI: public LTemplateInstruction<1, 2, 0> {
  public:
-  LBitI(Token::Value op, LOperand* left, LOperand* right)
-      : op_(op) {
+  LBitI(LOperand* left, LOperand* right) {
     inputs_[0] = left;
     inputs_[1] = right;
   }
 
-  Token::Value op() const { return op_; }
+  Token::Value op() const { return hydrogen()->op(); }
 
   DECLARE_CONCRETE_INSTRUCTION(BitI, "bit-i")
-
- private:
-  Token::Value op_;
+  DECLARE_HYDROGEN_ACCESSOR(Bitwise)
 };
 
 
@@ -2202,6 +2196,7 @@ class LChunkBuilder BASE_EMBEDDED {
       : chunk_(NULL),
         info_(info),
         graph_(graph),
+        isolate_(graph->isolate()),
         status_(UNUSED),
         current_instruction_(NULL),
         current_block_(NULL),
@@ -2231,6 +2226,7 @@ class LChunkBuilder BASE_EMBEDDED {
   LChunk* chunk() const { return chunk_; }
   CompilationInfo* info() const { return info_; }
   HGraph* graph() const { return graph_; }
+  Zone* zone() { return isolate_->zone(); }
 
   bool is_unused() const { return status_ == UNUSED; }
   bool is_building() const { return status_ == BUILDING; }
@@ -2333,7 +2329,6 @@ class LChunkBuilder BASE_EMBEDDED {
   void VisitInstruction(HInstruction* current);
 
   void DoBasicBlock(HBasicBlock* block, HBasicBlock* next_block);
-  LInstruction* DoBit(Token::Value op, HBitwiseBinaryOperation* instr);
   LInstruction* DoShift(Token::Value op, HBitwiseBinaryOperation* instr);
   LInstruction* DoArithmeticD(Token::Value op,
                               HArithmeticBinaryOperation* instr);
@@ -2343,6 +2338,7 @@ class LChunkBuilder BASE_EMBEDDED {
   LChunk* chunk_;
   CompilationInfo* info_;
   HGraph* const graph_;
+  Isolate* isolate_;
   Status status_;
   HInstruction* current_instruction_;
   HBasicBlock* current_block_;
