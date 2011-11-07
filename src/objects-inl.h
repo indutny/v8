@@ -563,10 +563,10 @@ bool Object::IsGlobalContext() {
 }
 
 
-bool Object::IsSerializedScopeInfo() {
+bool Object::IsScopeInfo() {
   return Object::IsHeapObject() &&
       HeapObject::cast(this)->map() ==
-      HeapObject::cast(this)->GetHeap()->serialized_scope_info_map();
+      HeapObject::cast(this)->GetHeap()->scope_info_map();
 }
 
 
@@ -1975,7 +1975,7 @@ int HashTable<Shape, Key>::FindEntry(Isolate* isolate, Key key) {
   while (true) {
     Object* element = KeyAt(entry);
     if (element == isolate->heap()->undefined_value()) break;  // Empty entry.
-    if (element != isolate->heap()->null_value() &&
+    if (element != isolate->heap()->the_hole_value() &&
         Shape::IsMatch(key, element)) return entry;
     entry = NextProbe(entry, count++, capacity);
   }
@@ -2015,6 +2015,7 @@ CAST_ACCESSOR(DeoptimizationOutputData)
 CAST_ACCESSOR(SymbolTable)
 CAST_ACCESSOR(JSFunctionResultCache)
 CAST_ACCESSOR(NormalizedMapCache)
+CAST_ACCESSOR(ScopeInfo)
 CAST_ACCESSOR(CompilationCacheTable)
 CAST_ACCESSOR(CodeCacheHashTable)
 CAST_ACCESSOR(PolymorphicCodeCacheHashTable)
@@ -3545,13 +3546,12 @@ void SharedFunctionInfo::set_code(Code* value, WriteBarrierMode mode) {
 }
 
 
-SerializedScopeInfo* SharedFunctionInfo::scope_info() {
-  return reinterpret_cast<SerializedScopeInfo*>(
-      READ_FIELD(this, kScopeInfoOffset));
+ScopeInfo* SharedFunctionInfo::scope_info() {
+  return reinterpret_cast<ScopeInfo*>(READ_FIELD(this, kScopeInfoOffset));
 }
 
 
-void SharedFunctionInfo::set_scope_info(SerializedScopeInfo* value,
+void SharedFunctionInfo::set_scope_info(ScopeInfo* value,
                                         WriteBarrierMode mode) {
   WRITE_FIELD(this, kScopeInfoOffset, reinterpret_cast<Object*>(value));
   CONDITIONAL_WRITE_BARRIER(GetHeap(),
@@ -4434,7 +4434,6 @@ bool ObjectHashTableShape<entrysize>::IsMatch(Object* key, Object* other) {
 
 template <int entrysize>
 uint32_t ObjectHashTableShape<entrysize>::Hash(Object* key) {
-  ASSERT(!key->IsUndefined() && !key->IsNull());
   MaybeObject* maybe_hash = key->GetHash(OMIT_CREATION);
   return Smi::cast(maybe_hash->ToObjectChecked())->value();
 }
@@ -4443,7 +4442,6 @@ uint32_t ObjectHashTableShape<entrysize>::Hash(Object* key) {
 template <int entrysize>
 uint32_t ObjectHashTableShape<entrysize>::HashForObject(Object* key,
                                                         Object* other) {
-  ASSERT(!other->IsUndefined() && !other->IsNull());
   MaybeObject* maybe_hash = other->GetHash(OMIT_CREATION);
   return Smi::cast(maybe_hash->ToObjectChecked())->value();
 }
@@ -4452,11 +4450,6 @@ uint32_t ObjectHashTableShape<entrysize>::HashForObject(Object* key,
 template <int entrysize>
 MaybeObject* ObjectHashTableShape<entrysize>::AsObject(Object* key) {
   return key;
-}
-
-
-void ObjectHashTable::RemoveEntry(int entry) {
-  RemoveEntry(entry, GetHeap());
 }
 
 

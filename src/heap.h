@@ -73,7 +73,7 @@ inline Heap* _inline_get_heap_();
   V(Map, global_context_map, GlobalContextMap)                                 \
   V(Map, fixed_array_map, FixedArrayMap)                                       \
   V(Map, code_map, CodeMap)                                                    \
-  V(Map, serialized_scope_info_map, SerializedScopeInfoMap)                    \
+  V(Map, scope_info_map, ScopeInfoMap)                                         \
   V(Map, fixed_cow_array_map, FixedCOWArrayMap)                                \
   V(Map, fixed_double_array_map, FixedDoubleArrayMap)                          \
   V(Object, no_interceptor_result_sentinel, NoInterceptorResultSentinel)       \
@@ -547,7 +547,7 @@ class Heap {
   MUST_USE_RESULT MaybeObject* AllocateCodeCache();
 
   // Allocates a serialized scope info.
-  MUST_USE_RESULT MaybeObject* AllocateSerializedScopeInfo(int length);
+  MUST_USE_RESULT MaybeObject* AllocateScopeInfo(int length);
 
   // Allocates an empty PolymorphicCodeCache.
   MUST_USE_RESULT MaybeObject* AllocatePolymorphicCodeCache();
@@ -737,7 +737,7 @@ class Heap {
   // Allocate a block context.
   MUST_USE_RESULT MaybeObject* AllocateBlockContext(JSFunction* function,
                                                     Context* previous,
-                                                    SerializedScopeInfo* info);
+                                                    ScopeInfo* info);
 
   // Allocates a new utility object in the old generation.
   MUST_USE_RESULT MaybeObject* AllocateStruct(InstanceType type);
@@ -1254,7 +1254,8 @@ class Heap {
         Max(old_gen_size + old_gen_size / divisor, kMinimumPromotionLimit);
     limit += new_space_.Capacity();
     limit *= old_gen_limit_factor_;
-    return limit;
+    intptr_t halfway_to_the_max = (old_gen_size + max_old_generation_size_) / 2;
+    return Min(limit, halfway_to_the_max);
   }
 
   intptr_t OldGenAllocationLimit(intptr_t old_gen_size) {
@@ -1263,7 +1264,8 @@ class Heap {
         Max(old_gen_size + old_gen_size / divisor, kMinimumAllocationLimit);
     limit += new_space_.Capacity();
     limit *= old_gen_limit_factor_;
-    return limit;
+    intptr_t halfway_to_the_max = (old_gen_size + max_old_generation_size_) / 2;
+    return Min(limit, halfway_to_the_max);
   }
 
   // Can be called when the embedding application is idle.
