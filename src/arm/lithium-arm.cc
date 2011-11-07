@@ -1415,7 +1415,7 @@ LInstruction* LChunkBuilder::DoCompareGeneric(HCompareGeneric* instr) {
   LOperand* left = UseFixed(instr->left(), r1);
   LOperand* right = UseFixed(instr->right(), r0);
   LCmpT* result = new LCmpT(left, right);
-  return AssignEnvironment(MarkAsCall(DefineFixed(result, r0), instr));
+  return MarkAsCall(DefineFixed(result, r0), instr);
 }
 
 
