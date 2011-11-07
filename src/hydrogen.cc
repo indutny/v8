@@ -2809,7 +2809,7 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       if (i < clause_count) {
         compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
       } else {
-        compare = new(zone()) HCompareGenericAndBranch(context, tag_value,
+        compare = new(zone()) HStringCompareAndBranch(context, tag_value,
                                                        label_value,
                                                        Token::EQ_STRICT);
       }

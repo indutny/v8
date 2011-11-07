@@ -121,7 +121,7 @@ class LChunkBuilder;
   V(IsStringAndBranch)                         \
   V(IsSmiAndBranch)                            \
   V(IsUndetectableAndBranch)                   \
-  V(CompareGenericAndBranch)                   \
+  V(StringCompareAndBranch)                   \
   V(JSArrayLength)                             \
   V(LeaveInlined)                              \
   V(LoadContextSlot)                           \
@@ -2759,9 +2759,9 @@ class HIsUndetectableAndBranch: public HUnaryControlInstruction {
 };
 
 
-class HCompareGenericAndBranch: public HTemplateControlInstruction<2, 3> {
+class HStringCompareAndBranch: public HTemplateControlInstruction<2, 3> {
  public:
-  HCompareGenericAndBranch(HValue* context,
+  HStringCompareAndBranch(HValue* context,
                            HValue* left,
                            HValue* right,
                            Token::Value token)
@@ -2788,7 +2788,7 @@ class HCompareGenericAndBranch: public HTemplateControlInstruction<2, 3> {
     return Representation::Tagged();
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(CompareGenericAndBranch)
+  DECLARE_CONCRETE_INSTRUCTION(StringCompareAndBranch)
 
  private:
   Token::Value token_;

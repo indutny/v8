@@ -1930,7 +1930,7 @@ static Condition ComputeCompareCondition(Token::Value op) {
 }
 
 
-void LCodeGen::DoCompareGenericAndBranch(LCompareGenericAndBranch* instr) {
+void LCodeGen::DoStringCompareAndBranch(LStringCompareAndBranch* instr) {
   Token::Value op = instr->op();
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());

@@ -106,7 +106,7 @@ class LCodeGen;
   V(IsStringAndBranch)                          \
   V(IsSmiAndBranch)                             \
   V(IsUndetectableAndBranch)                    \
-  V(CompareGenericAndBranch)                    \
+  V(StringCompareAndBranch)                    \
   V(JSArrayLength)                              \
   V(Label)                                      \
   V(LazyBailout)                                \
@@ -685,17 +685,17 @@ class LIsUndetectableAndBranch: public LControlInstruction<1, 1> {
 };
 
 
-class LCompareGenericAndBranch: public LControlInstruction<3, 0> {
+class LStringCompareAndBranch: public LControlInstruction<3, 0> {
  public:
-  LCompareGenericAndBranch(LOperand* context, LOperand* left, LOperand* right) {
+  LStringCompareAndBranch(LOperand* context, LOperand* left, LOperand* right) {
     inputs_[0] = context;
     inputs_[1] = left;
     inputs_[2] = right;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(CompareGenericAndBranch,
+  DECLARE_CONCRETE_INSTRUCTION(StringCompareAndBranch,
                                "compare-generic-and-branch")
-  DECLARE_HYDROGEN_ACCESSOR(CompareGenericAndBranch)
+  DECLARE_HYDROGEN_ACCESSOR(StringCompareAndBranch)
 
   virtual void PrintDataTo(StringStream* stream);
 
