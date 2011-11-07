@@ -1935,7 +1935,8 @@ void LCodeGen::DoStringCompareAndBranch(LStringCompareAndBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
 
-  Handle<Code> ic = CompareIC::GetUninitialized(op);
+  StringCompareStub stub;
+  Handle<Code> ic = stub.GetCode();
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
   __ cmp(r0, Operand(0));  // This instruction also signals no smi code inlined.
 
