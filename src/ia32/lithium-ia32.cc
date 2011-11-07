@@ -1545,7 +1545,7 @@ LInstruction* LChunkBuilder::DoStringCompareAndBranch(
   LStringCompareAndBranch* result = new
       LStringCompareAndBranch(context, left, right);
 
-  return AssignEnvironment(MarkAsCall(result, instr));
+  return MarkAsCall(result, instr);
 }
 
 
