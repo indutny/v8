@@ -2742,25 +2742,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HUnaryControlInstruction* string_check = NULL;
   HBasicBlock* not_string_block = NULL;
 
-  int iterations = clause_count;
-
   // Test switch's tag value if all clauses are string literals
   if (switch_type == STRING_SWITCH) {
-    // Bailout if we seen string(non-symbol) comparisons here
-    for (int i = 0; i < clause_count; ++i) {
-      CaseClause* clause = clauses->at(i);
-      if (clause->is_default()) continue;
-
-      clause->RecordTypeFeedback(oracle());
-
-      if (clause->IsStringCompare()) {
-        return Bailout("SwitchStatement: no symbol comparisons expected");
-      }
-    }
-
-    // We'll generate two passes of checks
-    iterations = iterations * 2;
-
     string_check = new(zone()) HIsStringAndBranch(tag_value);
     first_test_block = graph()->CreateBasicBlock();
     not_string_block = graph()->CreateBasicBlock();
@@ -2773,8 +2756,8 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   }
 
   // 2. Build all the tests, with dangling true branches
-  for (int i = 0; i < iterations; ++i) {
-    CaseClause* clause = clauses->at(i % clause_count);
+  for (int i = 0; i < clause_count; ++i) {
+    CaseClause* clause = clauses->at(i);
     if (clause->is_default()) continue;
 
     if (switch_type == SMI_SWITCH) {
@@ -2806,13 +2789,9 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       compare_->SetInputRepresentation(Representation::Integer32());
       compare = compare_;
     } else {
-      if (i < clause_count) {
-        compare = new(zone()) HCompareObjectEqAndBranch(tag_value, label_value);
-      } else {
-        compare = new(zone()) HStringCompareAndBranch(context, tag_value,
-                                                       label_value,
-                                                       Token::EQ_STRICT);
-      }
+      compare = new(zone()) HStringCompareAndBranch(context, tag_value,
+                                                     label_value,
+                                                     Token::EQ_STRICT);
     }
 
     compare->SetSuccessorAt(0, body_block);
@@ -2834,18 +2813,11 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // translating the clause bodies.
   HBasicBlock* curr_test_block = first_test_block;
   HBasicBlock* fall_through_block = NULL;
-  HBasicBlock* fall_through_block_left = NULL;
 
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
-    for (int i = 0; i < iterations; ++i) {
-      // Create shadow last block for second pass
-      if (i == clause_count) {
-        fall_through_block_left = fall_through_block;
-        fall_through_block = NULL;
-      }
-
-      CaseClause* clause = clauses->at(i % clause_count);
+    for (int i = 0; i < clause_count; ++i) {
+      CaseClause* clause = clauses->at(i);
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.
@@ -2888,10 +2860,6 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       fall_through_block = current_block();
     }
   }
-
-  // Join tails of parallel branches
-  fall_through_block = CreateJoin(fall_through_block, fall_through_block_left,
-                                  stmt->ExitId());
 
   // Create an up-to-3-way join.  Use the break block if it exists since
   // it's already a join block.
