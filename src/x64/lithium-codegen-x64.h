@@ -276,8 +276,7 @@ class LCodeGen BASE_EMBEDDED {
   // true and false label should be made, to optimize fallthrough.
   Condition EmitIsString(Register input,
                          Register temp1,
-                         Label* is_not_string,
-                         Label* is_string);
+                         Label* is_not_string);
 
   // Emits optimized code for %_IsConstructCall().
   // Caller should branch on equal condition.

@@ -1860,8 +1860,7 @@ void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
 
 Condition LCodeGen::EmitIsString(Register input,
                                  Register temp1,
-                                 Label* is_not_string,
-                                 Label* is_string) {
+                                 Label* is_not_string) {
   __ JumpIfSmi(input, is_not_string);
   __ CompareObjectType(input, temp1, temp1, FIRST_NONSTRING_TYPE);
 
@@ -1875,11 +1874,10 @@ void LCodeGen::DoIsStringAndBranch(LIsStringAndBranch* instr) {
 
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
-  Label* true_label = chunk_->GetAssemblyLabel(true_block);
   Label* false_label = chunk_->GetAssemblyLabel(false_block);
 
   Condition true_cond =
-      EmitIsString(reg, temp1, false_label, true_label);
+      EmitIsString(reg, temp1, false_label);
 
   EmitBranch(true_block, false_block, true_cond);
 }
