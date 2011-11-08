@@ -1407,7 +1407,7 @@ LInstruction* LChunkBuilder::DoCompareGeneric(HCompareGeneric* instr) {
   LOperand* left = UseFixed(instr->left(), rdx);
   LOperand* right = UseFixed(instr->right(), rax);
   LCmpT* result = new LCmpT(left, right);
-  return AssignEnvironment(MarkAsCall(DefineFixed(result, rax), instr));
+  return MarkAsCall(DefineFixed(result, rax), instr);
 }
 
 
@@ -1467,7 +1467,8 @@ LInstruction* LChunkBuilder::DoIsObjectAndBranch(HIsObjectAndBranch* instr) {
 
 LInstruction* LChunkBuilder::DoIsStringAndBranch(HIsStringAndBranch* instr) {
   ASSERT(instr->value()->representation().IsTagged());
-  return new LIsStringAndBranch(UseRegisterAtStart(instr->value()));
+  LOperand* temp = TempRegister();
+  return new LIsStringAndBranch(UseRegisterAtStart(instr->value()), temp);
 }
 
 

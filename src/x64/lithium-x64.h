@@ -642,10 +642,11 @@ class LIsObjectAndBranch: public LControlInstruction<1, 0> {
 };
 
 
-class LIsStringAndBranch: public LControlInstruction<1, 0> {
+class LIsStringAndBranch: public LControlInstruction<1, 1> {
  public:
-  explicit LIsStringAndBranch(LOperand* value) {
+  explicit LIsStringAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
+    temps_[0] = temp;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(IsStringAndBranch, "is-string-and-branch")
