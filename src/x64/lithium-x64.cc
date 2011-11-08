@@ -230,13 +230,6 @@ void LIsObjectAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
-void LIsStringAndBranch::PrintDataTo(StringStream* stream) {
-  stream->Add("if is_string(");
-  InputAt(0)->PrintTo(stream);
-  stream->Add(") then B%d else B%d", true_block_id(), false_block_id());
-}
-
-
 void LIsSmiAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if is_smi(");
   InputAt(0)->PrintTo(stream);
@@ -247,14 +240,6 @@ void LIsSmiAndBranch::PrintDataTo(StringStream* stream) {
 void LIsUndetectableAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if is_undetectable(");
   InputAt(0)->PrintTo(stream);
-  stream->Add(") then B%d else B%d", true_block_id(), false_block_id());
-}
-
-
-void LStringCompareAndBranch::PrintDataTo(StringStream* stream) {
-  stream->Add("if compare_generic(");
-  InputAt(0)->PrintTo(stream);
-  InputAt(1)->PrintTo(stream);
   stream->Add(") then B%d else B%d", true_block_id(), false_block_id());
 }
 
@@ -1483,19 +1468,6 @@ LInstruction* LChunkBuilder::DoIsUndetectableAndBranch(
   ASSERT(instr->value()->representation().IsTagged());
   return new LIsUndetectableAndBranch(UseRegisterAtStart(instr->value()),
                                       TempRegister());
-}
-
-
-LInstruction* LChunkBuilder::DoStringCompareAndBranch(
-    HStringCompareAndBranch* instr) {
-
-  ASSERT(instr->left()->representation().IsTagged());
-  ASSERT(instr->right()->representation().IsTagged());
-  LOperand* left = UseFixed(instr->left(), rdx);
-  LOperand* right = UseFixed(instr->right(), rax);
-  LStringCompareAndBranch* result = new LStringCompareAndBranch(left, right);
-
-  return MarkAsCall(result, instr);
 }
 
 

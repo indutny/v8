@@ -109,10 +109,8 @@ class LCodeGen;
   V(IsConstructCallAndBranch)                   \
   V(IsNilAndBranch)                             \
   V(IsObjectAndBranch)                          \
-  V(IsStringAndBranch)                          \
   V(IsSmiAndBranch)                             \
   V(IsUndetectableAndBranch)                    \
-  V(StringCompareAndBranch)                    \
   V(JSArrayLength)                              \
   V(Label)                                      \
   V(LazyBailout)                                \
@@ -681,23 +679,6 @@ class LIsUndetectableAndBranch: public LControlInstruction<1, 1> {
   DECLARE_HYDROGEN_ACCESSOR(IsUndetectableAndBranch)
 
   virtual void PrintDataTo(StringStream* stream);
-};
-
-
-class LStringCompareAndBranch: public LControlInstruction<2, 0> {
- public:
-  explicit LStringCompareAndBranch(LOperand* left, LOperand* right) {
-    inputs_[0] = left;
-    inputs_[1] = right;
-  }
-
-  DECLARE_CONCRETE_INSTRUCTION(StringCompareAndBranch,
-                               "compare-generic-and-branch")
-  DECLARE_HYDROGEN_ACCESSOR(StringCompareAndBranch)
-
-  virtual void PrintDataTo(StringStream* stream);
-
-  Token::Value op() const { return hydrogen()->token(); }
 };
 
 
