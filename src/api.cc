@@ -486,7 +486,7 @@ RegisteredExtension* RegisteredExtension::first_extension_ = NULL;
 
 
 RegisteredExtension::RegisteredExtension(Extension* extension)
-    : extension_(extension), state_(UNVISITED) { }
+    : extension_(extension) { }
 
 
 void RegisteredExtension::Register(RegisteredExtension* that) {
@@ -3618,6 +3618,23 @@ int Function::GetScriptLineNumber() const {
   return kLineOffsetNotFound;
 }
 
+
+int Function::GetScriptColumnNumber() const {
+  i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
+  if (func->shared()->script()->IsScript()) {
+    i::Handle<i::Script> script(i::Script::cast(func->shared()->script()));
+    return i::GetScriptColumnNumber(script, func->shared()->start_position());
+  }
+  return kLineOffsetNotFound;
+}
+
+Handle<Value> Function::GetScriptId() const {
+  i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
+  if (!func->shared()->script()->IsScript())
+    return v8::Undefined();
+  i::Handle<i::Script> script(i::Script::cast(func->shared()->script()));
+  return Utils::ToLocal(i::Handle<i::Object>(script->id()));
+}
 
 int String::Length() const {
   i::Handle<i::String> str = Utils::OpenHandle(this);

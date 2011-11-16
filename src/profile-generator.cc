@@ -150,9 +150,11 @@ const char* StringsStorage::GetVFormatted(const char* format, va_list args) {
 
 const char* StringsStorage::GetName(String* name) {
   if (name->IsString()) {
-    return AddOrDisposeString(
-        name->ToCString(DISALLOW_NULLS, ROBUST_STRING_TRAVERSAL).Detach(),
-        name->Hash());
+    int length = Min(kMaxNameSize, name->length());
+    SmartArrayPointer<char> data =
+        name->ToCString(DISALLOW_NULLS, ROBUST_STRING_TRAVERSAL, 0, length);
+    uint32_t hash = HashSequentialString(*data, length);
+    return AddOrDisposeString(data.Detach(), hash);
   }
   return "";
 }
@@ -1916,6 +1918,7 @@ void V8HeapExplorer::ExtractReferences(HeapObject* obj) {
           SetPropertyReference(
               obj, entry,
               heap_->prototype_symbol(), proto_or_map,
+              NULL,
               JSFunction::kPrototypeOrInitialMapOffset);
         } else {
           SetPropertyReference(
@@ -2099,6 +2102,7 @@ void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj,
             SetPropertyReference(
                 js_obj, entry,
                 descs->GetKey(i), js_obj->InObjectPropertyAt(index),
+                NULL,
                 js_obj->GetInObjectPropertyOffset(index));
           } else {
             SetPropertyReference(
@@ -2112,7 +2116,29 @@ void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj,
               js_obj, entry,
               descs->GetKey(i), descs->GetConstantFunction(i));
           break;
-        default: ;
+        case CALLBACKS: {
+          Object* callback_obj = descs->GetValue(i);
+          if (callback_obj->IsFixedArray()) {
+            FixedArray* accessors = FixedArray::cast(callback_obj);
+            if (Object* getter = accessors->get(JSObject::kGetterIndex)) {
+              SetPropertyReference(js_obj, entry, descs->GetKey(i),
+                                   getter, "get-%s");
+            }
+            if (Object* setter = accessors->get(JSObject::kSetterIndex)) {
+              SetPropertyReference(js_obj, entry, descs->GetKey(i),
+                                   setter, "set-%s");
+            }
+          }
+          break;
+        }
+        case NORMAL:  // only in slow mode
+        case HANDLER:  // only in lookup results, not in descriptors
+        case INTERCEPTOR:  // only in lookup results, not in descriptors
+        case MAP_TRANSITION:  // we do not care about transitions here...
+        case ELEMENTS_TRANSITION:
+        case CONSTANT_TRANSITION:
+        case NULL_DESCRIPTOR:  // ... and not about "holes"
+          break;
       }
     }
   } else {
@@ -2337,15 +2363,23 @@ void V8HeapExplorer::SetPropertyReference(HeapObject* parent_obj,
                                           HeapEntry* parent_entry,
                                           String* reference_name,
                                           Object* child_obj,
+                                          const char* name_format_string,
                                           int field_offset) {
   HeapEntry* child_entry = GetEntry(child_obj);
   if (child_entry != NULL) {
     HeapGraphEdge::Type type = reference_name->length() > 0 ?
         HeapGraphEdge::kProperty : HeapGraphEdge::kInternal;
+    const char* name = name_format_string  != NULL ?
+        collection_->names()->GetFormatted(
+            name_format_string,
+            *reference_name->ToCString(DISALLOW_NULLS,
+                                       ROBUST_STRING_TRAVERSAL)) :
+        collection_->names()->GetName(reference_name);
+
     filler_->SetNamedReference(type,
                                parent_obj,
                                parent_entry,
-                               collection_->names()->GetName(reference_name),
+                               name,
                                child_obj,
                                child_entry);
     IndexedReferencesExtractor::MarkVisitedField(parent_obj, field_offset);
@@ -2439,6 +2473,7 @@ void V8HeapExplorer::TagGlobalObjects() {
   Isolate* isolate = Isolate::Current();
   GlobalObjectsEnumerator enumerator;
   isolate->global_handles()->IterateAllRoots(&enumerator);
+  HandleScope scope;
   Handle<String> document_string =
       isolate->factory()->NewStringFromAscii(CStrVector("document"));
   Handle<String> url_string =
@@ -2446,6 +2481,7 @@ void V8HeapExplorer::TagGlobalObjects() {
   const char** urls = NewArray<const char*>(enumerator.count());
   for (int i = 0, l = enumerator.count(); i < l; ++i) {
     urls[i] = NULL;
+    HandleScope scope;
     Handle<JSGlobalObject> global_obj = enumerator.at(i);
     Object* obj_document;
     if (global_obj->GetProperty(*document_string)->ToObject(&obj_document) &&

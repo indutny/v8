@@ -1313,13 +1313,17 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
         // binding is initialized:
         //   function() { f(); let x = 1; function f() { x = 2; } }
         //
-        // Check that we always have valid source position.
-        ASSERT(var->initializer_position() != RelocInfo::kNoPosition);
-        ASSERT(proxy->position() != RelocInfo::kNoPosition);
-        bool skip_init_check =
-            var->mode() != CONST &&
-            var->scope()->DeclarationScope() == scope()->DeclarationScope() &&
-            var->initializer_position() < proxy->position();
+        bool skip_init_check;
+        if (var->scope()->DeclarationScope() != scope()->DeclarationScope()) {
+          skip_init_check = false;
+        } else {
+          // Check that we always have valid source position.
+          ASSERT(var->initializer_position() != RelocInfo::kNoPosition);
+          ASSERT(proxy->position() != RelocInfo::kNoPosition);
+          skip_init_check = var->mode() != CONST &&
+              var->initializer_position() < proxy->position();
+        }
+
         if (!skip_init_check) {
           // Let and const need a read barrier.
           GetVar(v0, var);
@@ -2238,6 +2242,7 @@ void FullCodeGenerator::EmitCallWithStub(Call* expr, CallFunctionFlags flags) {
   // Record source position for debugger.
   SetSourcePosition(expr->position());
   CallFunctionStub stub(arg_count, flags);
+  __ lw(a1, MemOperand(sp, (arg_count + 1) * kPointerSize));
   __ CallStub(&stub);
   RecordJSReturnSite(expr);
   // Restore context register.
@@ -2266,7 +2271,11 @@ void FullCodeGenerator::EmitResolvePossiblyDirectEval(int arg_count) {
   __ li(a1, Operand(Smi::FromInt(strict_mode)));
   __ push(a1);
 
-  __ CallRuntime(Runtime::kResolvePossiblyDirectEval, 4);
+  // Push the start position of the scope the calls resides in.
+  __ li(a1, Operand(Smi::FromInt(scope()->start_position())));
+  __ push(a1);
+
+  __ CallRuntime(Runtime::kResolvePossiblyDirectEval, 5);
 }
 
 
@@ -2314,6 +2323,7 @@ void FullCodeGenerator::VisitCall(Call* expr) {
     // Record source position for debugger.
     SetSourcePosition(expr->position());
     CallFunctionStub stub(arg_count, RECEIVER_MIGHT_BE_IMPLICIT);
+    __ lw(a1, MemOperand(sp, (arg_count + 1) * kPointerSize));
     __ CallStub(&stub);
     RecordJSReturnSite(expr);
     // Restore context register.
@@ -3052,7 +3062,6 @@ void FullCodeGenerator::EmitStringCharCodeAt(CallRuntime* expr) {
 
   Register object = a1;
   Register index = a0;
-  Register scratch = a2;
   Register result = v0;
 
   __ pop(object);
@@ -3062,7 +3071,6 @@ void FullCodeGenerator::EmitStringCharCodeAt(CallRuntime* expr) {
   Label done;
   StringCharCodeAtGenerator generator(object,
                                       index,
-                                      scratch,
                                       result,
                                       &need_conversion,
                                       &need_conversion,
@@ -3101,8 +3109,7 @@ void FullCodeGenerator::EmitStringCharAt(CallRuntime* expr) {
 
   Register object = a1;
   Register index = a0;
-  Register scratch1 = a2;
-  Register scratch2 = a3;
+  Register scratch = a3;
   Register result = v0;
 
   __ pop(object);
@@ -3112,8 +3119,7 @@ void FullCodeGenerator::EmitStringCharAt(CallRuntime* expr) {
   Label done;
   StringCharAtGenerator generator(object,
                                   index,
-                                  scratch1,
-                                  scratch2,
+                                  scratch,
                                   result,
                                   &need_conversion,
                                   &need_conversion,
@@ -3226,12 +3232,24 @@ void FullCodeGenerator::EmitCallFunction(CallRuntime* expr) {
   }
   VisitForAccumulatorValue(args->last());  // Function.
 
+  // Check for proxy.
+  Label proxy, done;
+  __ GetObjectType(v0, a1, a1);
+  __ Branch(&proxy, eq, a1, Operand(JS_FUNCTION_PROXY_TYPE));
+
   // InvokeFunction requires the function in a1. Move it in there.
   __ mov(a1, result_register());
   ParameterCount count(arg_count);
   __ InvokeFunction(a1, count, CALL_FUNCTION,
                     NullCallWrapper(), CALL_AS_METHOD);
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  __ jmp(&done);
+
+  __ bind(&proxy);
+  __ push(v0);
+  __ CallRuntime(Runtime::kCall, args->length());
+  __ bind(&done);
+
   context()->Plug(v0);
 }
 

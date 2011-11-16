@@ -43,8 +43,6 @@ class FuncNameInferrer;
 class ParserLog;
 class PositionStack;
 class Target;
-class LexicalScope;
-class SaveScope;
 
 template <typename T> class ZoneListWrapper;
 
@@ -69,30 +67,32 @@ class ParserMessage : public Malloced {
 
 class FunctionEntry BASE_EMBEDDED {
  public:
-  explicit FunctionEntry(Vector<unsigned> backing) : backing_(backing) { }
-  FunctionEntry() : backing_(Vector<unsigned>::empty()) { }
+  enum {
+    kStartPositionIndex,
+    kEndPositionIndex,
+    kLiteralCountIndex,
+    kPropertyCountIndex,
+    kStrictModeIndex,
+    kSize
+  };
 
-  int start_pos() { return backing_[kStartPosOffset]; }
-  int end_pos() { return backing_[kEndPosOffset]; }
-  int literal_count() { return backing_[kLiteralCountOffset]; }
-  int property_count() { return backing_[kPropertyCountOffset]; }
+  explicit FunctionEntry(Vector<unsigned> backing) : backing_(backing) { }
+  FunctionEntry() { }
+
+  int start_pos() { return backing_[kStartPositionIndex]; }
+  int end_pos() { return backing_[kEndPositionIndex]; }
+  int literal_count() { return backing_[kLiteralCountIndex]; }
+  int property_count() { return backing_[kPropertyCountIndex]; }
   StrictModeFlag strict_mode_flag() {
-    ASSERT(backing_[kStrictModeOffset] == kStrictMode ||
-           backing_[kStrictModeOffset] == kNonStrictMode);
-    return static_cast<StrictModeFlag>(backing_[kStrictModeOffset]);
+    ASSERT(backing_[kStrictModeIndex] == kStrictMode ||
+           backing_[kStrictModeIndex] == kNonStrictMode);
+    return static_cast<StrictModeFlag>(backing_[kStrictModeIndex]);
   }
 
-  bool is_valid() { return backing_.length() > 0; }
-
-  static const int kSize = 5;
+  bool is_valid() { return !backing_.is_empty(); }
 
  private:
   Vector<unsigned> backing_;
-  static const int kStartPosOffset = 0;
-  static const int kEndPosOffset = 1;
-  static const int kLiteralCountOffset = 2;
-  static const int kPropertyCountOffset = 3;
-  static const int kStrictModeOffset = 4;
 };
 
 
@@ -104,7 +104,7 @@ class ScriptDataImpl : public ScriptData {
 
   // Create an empty ScriptDataImpl that is guaranteed to not satisfy
   // a SanityCheck.
-  ScriptDataImpl() : store_(Vector<unsigned>()), owns_store_(false) { }
+  ScriptDataImpl() : owns_store_(false) { }
 
   virtual ~ScriptDataImpl();
   virtual int Length();
@@ -430,10 +430,7 @@ class Parser {
   virtual ~Parser() { }
 
   // Returns NULL if parsing failed.
-  FunctionLiteral* ParseProgram(Handle<String> source,
-                                bool in_global_context,
-                                StrictModeFlag strict_mode);
-
+  FunctionLiteral* ParseProgram(CompilationInfo* info);
   FunctionLiteral* ParseLazy(CompilationInfo* info);
 
   void ReportMessageAt(Scanner::Location loc,
@@ -451,9 +448,7 @@ class Parser {
   // should be checked.
   static const int kMaxNumFunctionParameters = 32766;
   static const int kMaxNumFunctionLocals = 32767;
-  FunctionLiteral* ParseLazy(CompilationInfo* info,
-                             UC16CharacterStream* source,
-                             ZoneScope* zone_scope);
+
   enum Mode {
     PARSE_LAZILY,
     PARSE_EAGERLY
@@ -471,13 +466,19 @@ class Parser {
     kHasNoInitializers
   };
 
+  class BlockState;
+  class FunctionState;
+
+  FunctionLiteral* ParseLazy(CompilationInfo* info,
+                             UC16CharacterStream* source,
+                             ZoneScope* zone_scope);
+
   Isolate* isolate() { return isolate_; }
   Zone* zone() { return isolate_->zone(); }
 
   // Called by ParseProgram after setting up the scanner.
-  FunctionLiteral* DoParseProgram(Handle<String> source,
-                                  bool in_global_context,
-                                  StrictModeFlag strict_mode,
+  FunctionLiteral* DoParseProgram(CompilationInfo* info,
+                                  Handle<String> source,
                                   ZoneScope* zone_scope);
 
   // Report syntax error
@@ -729,16 +730,14 @@ class Parser {
   Scanner scanner_;
 
   Scope* top_scope_;
-
-  LexicalScope* lexical_scope_;
-  Mode mode_;
-
+  FunctionState* current_function_state_;
   Target* target_stack_;  // for break, continue statements
-  bool allow_natives_syntax_;
   v8::Extension* extension_;
-  bool is_pre_parsing_;
   ScriptDataImpl* pre_data_;
   FuncNameInferrer* fni_;
+
+  Mode mode_;
+  bool allow_natives_syntax_;
   bool stack_overflow_;
   // If true, the next (and immediately following) function literal is
   // preceded by a parenthesis.
@@ -747,8 +746,8 @@ class Parser {
   bool parenthesized_function_;
   bool harmony_scoping_;
 
-  friend class LexicalScope;
-  friend class SaveScope;
+  friend class BlockState;
+  friend class FunctionState;
 };
 
 

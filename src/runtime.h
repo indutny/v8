@@ -69,7 +69,6 @@ namespace internal {
   \
   F(GetPrototype, 1, 1) \
   F(IsInPrototypeChain, 2, 1) \
-  F(SetHiddenPrototype, 2, 1) \
   \
   F(IsConstructCall, 0, 1) \
   \
@@ -80,6 +79,7 @@ namespace internal {
   \
   /* Utilities */ \
   F(CheckIsBootstrapping, 0, 1) \
+  F(Call, -1 /* >= 2 */, 1) \
   F(Apply, 5, 1) \
   F(GetFunctionDelegate, 1, 1) \
   F(GetConstructorDelegate, 1, 1) \
@@ -143,7 +143,7 @@ namespace internal {
   F(StringAdd, 2, 1) \
   F(StringBuilderConcat, 3, 1) \
   F(StringBuilderJoin, 3, 1) \
-  F(SparseJoinWithSeparator, 3, 1)            \
+  F(SparseJoinWithSeparator, 3, 1) \
   \
   /* Bit operations */ \
   F(NumberOr, 2, 1) \
@@ -258,7 +258,7 @@ namespace internal {
   \
   /* Eval */ \
   F(GlobalReceiver, 1, 1) \
-  F(ResolvePossiblyDirectEval, 4, 2) \
+  F(ResolvePossiblyDirectEval, 5, 2) \
   \
   F(SetProperty, -1 /* 4 or 5 */, 1) \
   F(DefineOrRedefineDataProperty, 4, 1) \

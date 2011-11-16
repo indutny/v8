@@ -385,9 +385,6 @@ static bool ArrayPrototypeHasNoElements(Heap* heap,
   // This method depends on non writability of Object and Array prototype
   // fields.
   if (array_proto->elements() != heap->empty_fixed_array()) return false;
-  // Hidden prototype
-  array_proto = JSObject::cast(array_proto->GetPrototype());
-  ASSERT(array_proto->elements() == heap->empty_fixed_array());
   // Object.prototype
   Object* proto = array_proto->GetPrototype();
   if (proto == heap->null_value()) return false;
@@ -775,7 +772,8 @@ BUILTIN(ArraySlice) {
 
   // Set the ElementsKind.
   ElementsKind elements_kind = JSObject::cast(receiver)->GetElementsKind();
-  if (result_array->GetElementsKind() != elements_kind) {
+  if (IsMoreGeneralElementsKindTransition(result_array->GetElementsKind(),
+                                          elements_kind)) {
     MaybeObject* maybe = result_array->TransitionElementsKind(elements_kind);
     if (maybe->IsFailure()) return maybe;
   }
@@ -875,7 +873,8 @@ BUILTIN(ArraySplice) {
 
     // Set the ElementsKind.
     ElementsKind elements_kind = array->GetElementsKind();
-    if (result_array->GetElementsKind() != elements_kind) {
+    if (IsMoreGeneralElementsKindTransition(result_array->GetElementsKind(),
+                                            elements_kind)) {
       MaybeObject* maybe = result_array->TransitionElementsKind(elements_kind);
       if (maybe->IsFailure()) return maybe;
     }
@@ -1560,8 +1559,8 @@ static void Generate_Return_DebugBreak(MacroAssembler* masm) {
 }
 
 
-static void Generate_StubNoRegisters_DebugBreak(MacroAssembler* masm) {
-  Debug::GenerateStubNoRegistersDebugBreak(masm);
+static void Generate_CallFunctionStub_DebugBreak(MacroAssembler* masm) {
+  Debug::GenerateCallFunctionStubDebugBreak(masm);
 }
 
 

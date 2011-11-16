@@ -118,11 +118,6 @@ class CodeStub BASE_EMBEDDED {
   // Retrieve the code for the stub. Generate the code if needed.
   Handle<Code> GetCode();
 
-  // Retrieve the code for the stub if already generated.  Do not
-  // generate the code if not already generated and instead return a
-  // retry after GC Failure object.
-  MUST_USE_RESULT MaybeObject* TryGetCode();
-
   static Major MajorKeyFromKey(uint32_t key) {
     return static_cast<Major>(MajorKeyBits::decode(key));
   }
@@ -160,14 +155,14 @@ class CodeStub BASE_EMBEDDED {
   // result in a traversable stack.
   virtual bool SometimesSetsUpAFrame() { return true; }
 
+  // Lookup the code in the (possibly custom) cache.
+  bool FindCodeInCache(Code** code_out);
+
  protected:
   static const int kMajorBits = 6;
   static const int kMinorBits = kBitsPerInt - kSmiTagSize - kMajorBits;
 
  private:
-  // Lookup the code in the (possibly custom) cache.
-  bool FindCodeInCache(Code** code_out);
-
   // Nonvirtual wrapper around the stub-specific Generate function.  Call
   // this function to set up the macro assembler and generate the code.
   void GenerateCode(MacroAssembler* masm);
@@ -180,11 +175,7 @@ class CodeStub BASE_EMBEDDED {
   void RecordCodeGeneration(Code* code, MacroAssembler* masm);
 
   // Finish the code object after it has been generated.
-  virtual void FinishCode(Code* code) { }
-
-  // Returns true if TryGetCode should fail if it failed
-  // to register newly generated stub in the stub cache.
-  virtual bool MustBeInStubCache() { return false; }
+  virtual void FinishCode(Handle<Code> code) { }
 
   // Activate newly generated stub. Is called after
   // registering stub in the stub cache.
@@ -450,7 +441,9 @@ class ICCompareStub: public CodeStub {
   class OpField: public BitField<int, 0, 3> { };
   class StateField: public BitField<int, 3, 5> { };
 
-  virtual void FinishCode(Code* code) { code->set_compare_state(state_); }
+  virtual void FinishCode(Handle<Code> code) {
+    code->set_compare_state(state_);
+  }
 
   virtual CodeStub::Major MajorKey() { return CompareIC; }
   virtual int MinorKey();
@@ -553,7 +546,7 @@ class CompareStub: public CodeStub {
   int MinorKey();
 
   virtual int GetCodeKind() { return Code::COMPARE_IC; }
-  virtual void FinishCode(Code* code) {
+  virtual void FinishCode(Handle<Code> code) {
     code->set_compare_state(CompareIC::GENERIC);
   }
 
@@ -618,6 +611,10 @@ class JSEntryStub : public CodeStub {
  private:
   Major MajorKey() { return JSEntry; }
   int MinorKey() { return 0; }
+
+  virtual void FinishCode(Handle<Code> code);
+
+  int handler_offset_;
 };
 
 
@@ -694,7 +691,7 @@ class CallFunctionStub: public CodeStub {
 
   void Generate(MacroAssembler* masm);
 
-  virtual void FinishCode(Code* code);
+  virtual void FinishCode(Handle<Code> code);
 
   static void Clear(Heap* heap, Address address);
 
@@ -771,7 +768,6 @@ class StringCharCodeAtGenerator {
  public:
   StringCharCodeAtGenerator(Register object,
                             Register index,
-                            Register scratch,
                             Register result,
                             Label* receiver_not_string,
                             Label* index_not_number,
@@ -779,15 +775,11 @@ class StringCharCodeAtGenerator {
                             StringIndexFlags index_flags)
       : object_(object),
         index_(index),
-        scratch_(scratch),
         result_(result),
         receiver_not_string_(receiver_not_string),
         index_not_number_(index_not_number),
         index_out_of_range_(index_out_of_range),
         index_flags_(index_flags) {
-    ASSERT(!scratch_.is(object_));
-    ASSERT(!scratch_.is(index_));
-    ASSERT(!scratch_.is(result_));
     ASSERT(!result_.is(object_));
     ASSERT(!result_.is(index_));
   }
@@ -805,7 +797,6 @@ class StringCharCodeAtGenerator {
  private:
   Register object_;
   Register index_;
-  Register scratch_;
   Register result_;
 
   Label* receiver_not_string_;
@@ -868,8 +859,7 @@ class StringCharAtGenerator {
  public:
   StringCharAtGenerator(Register object,
                         Register index,
-                        Register scratch1,
-                        Register scratch2,
+                        Register scratch,
                         Register result,
                         Label* receiver_not_string,
                         Label* index_not_number,
@@ -877,13 +867,12 @@ class StringCharAtGenerator {
                         StringIndexFlags index_flags)
       : char_code_at_generator_(object,
                                 index,
-                                scratch1,
-                                scratch2,
+                                scratch,
                                 receiver_not_string,
                                 index_not_number,
                                 index_out_of_range,
                                 index_flags),
-        char_from_code_generator_(scratch2, result) {}
+        char_from_code_generator_(scratch, result) {}
 
   // Generates the fast case code. On the fallthrough path |result|
   // register contains the result.
@@ -1013,7 +1002,7 @@ class ToBooleanStub: public CodeStub {
   Major MajorKey() { return ToBoolean; }
   int MinorKey() { return (tos_.code() << NUMBER_OF_TYPES) | types_.ToByte(); }
 
-  virtual void FinishCode(Code* code) {
+  virtual void FinishCode(Handle<Code> code) {
     code->set_to_boolean_state(types_.ToByte());
   }
 

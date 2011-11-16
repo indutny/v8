@@ -1,3 +1,34 @@
+2011-11-14: Version 3.7.7
+
+        Fix missing fast property accessors in heap snapshots.
+        (issue 1818)
+
+
+2011-11-11: Version 3.7.6
+
+        Fixed filtering of store buffer for large object pages.
+        (issue 1817)
+
+        Fixed generated hash function on all platforms.
+        (issue 1808)
+
+        Fixed Heap::Shrink to ensure that it does not free pages that are
+        still in use.
+        (Chromium issue 100414)
+
+        Stability and performance improvements on all platforms.
+
+
+2011-11-10: Version 3.7.5
+
+        Added initial gyp infrastructure for MIPS.
+
+        Implemented performance improvements to the incremental garbage
+        collector.
+
+        Added optimizations and stability improvements on all platforms.
+
+
 2011-11-07: Version 3.7.4
 
         Proper "libv8.so.3.7.4" SONAME for Linux shared library (issue 1786).
@@ -339,7 +370,7 @@
 
         Fix the debugger for strict-mode functions. (Chromium issue 89236)
 
-        Add GetPropertyAttribute method for Object in the API. (Patch by 
+        Add GetPropertyAttribute method for Object in the API. (Patch by
         Peter Varga)
 
         Fix -Wunused-but-set-variable for gcc-4.6 on x64. (Issue 1291)

@@ -335,7 +335,14 @@ class BreakableStatement: public Statement {
   int ExitId() const { return exit_id_; }
 
  protected:
-  BreakableStatement(Isolate* isolate, ZoneStringList* labels, Type type);
+  BreakableStatement(Isolate* isolate, ZoneStringList* labels, Type type)
+      : labels_(labels),
+        type_(type),
+        entry_id_(GetNextId(isolate)),
+        exit_id_(GetNextId(isolate)) {
+    ASSERT(labels == NULL || labels->length() > 0);
+  }
+
 
  private:
   ZoneStringList* labels_;
@@ -348,10 +355,16 @@ class BreakableStatement: public Statement {
 
 class Block: public BreakableStatement {
  public:
-  inline Block(Isolate* isolate,
-               ZoneStringList* labels,
-               int capacity,
-               bool is_initializer_block);
+  Block(Isolate* isolate,
+        ZoneStringList* labels,
+        int capacity,
+        bool is_initializer_block)
+      : BreakableStatement(isolate, labels, TARGET_FOR_NAMED_ONLY),
+        statements_(capacity),
+        is_initializer_block_(is_initializer_block),
+        block_scope_(NULL) {
+  }
+
 
   DECLARE_NODE_TYPE(Block)
 
@@ -424,7 +437,11 @@ class IterationStatement: public BreakableStatement {
   Label* continue_target()  { return &continue_target_; }
 
  protected:
-  inline IterationStatement(Isolate* isolate, ZoneStringList* labels);
+  IterationStatement(Isolate* isolate, ZoneStringList* labels)
+      : BreakableStatement(isolate, labels, TARGET_FOR_ANONYMOUS),
+        body_(NULL),
+        osr_entry_id_(GetNextId(isolate)) {
+  }
 
   void Initialize(Statement* body) {
     body_ = body;
@@ -439,7 +456,13 @@ class IterationStatement: public BreakableStatement {
 
 class DoWhileStatement: public IterationStatement {
  public:
-  inline DoWhileStatement(Isolate* isolate, ZoneStringList* labels);
+  DoWhileStatement(Isolate* isolate, ZoneStringList* labels)
+      : IterationStatement(isolate, labels),
+        cond_(NULL),
+        condition_position_(-1),
+        continue_id_(GetNextId(isolate)),
+        back_edge_id_(GetNextId(isolate)) {
+  }
 
   DECLARE_NODE_TYPE(DoWhileStatement)
 
@@ -472,7 +495,12 @@ class DoWhileStatement: public IterationStatement {
 
 class WhileStatement: public IterationStatement {
  public:
-  inline WhileStatement(Isolate* isolate, ZoneStringList* labels);
+  WhileStatement(Isolate* isolate, ZoneStringList* labels)
+      : IterationStatement(isolate, labels),
+        cond_(NULL),
+        may_have_function_literal_(true),
+        body_id_(GetNextId(isolate)) {
+  }
 
   DECLARE_NODE_TYPE(WhileStatement)
 
@@ -505,7 +533,16 @@ class WhileStatement: public IterationStatement {
 
 class ForStatement: public IterationStatement {
  public:
-  inline ForStatement(Isolate* isolate, ZoneStringList* labels);
+  ForStatement(Isolate* isolate, ZoneStringList* labels)
+      : IterationStatement(isolate, labels),
+        init_(NULL),
+        cond_(NULL),
+        next_(NULL),
+        may_have_function_literal_(true),
+        loop_variable_(NULL),
+        continue_id_(GetNextId(isolate)),
+        body_id_(GetNextId(isolate)) {
+  }
 
   DECLARE_NODE_TYPE(ForStatement)
 
@@ -554,7 +591,12 @@ class ForStatement: public IterationStatement {
 
 class ForInStatement: public IterationStatement {
  public:
-  inline ForInStatement(Isolate* isolate, ZoneStringList* labels);
+  ForInStatement(Isolate* isolate, ZoneStringList* labels)
+      : IterationStatement(isolate, labels),
+        each_(NULL),
+        enumerable_(NULL),
+        assignment_id_(GetNextId(isolate)) {
+  }
 
   DECLARE_NODE_TYPE(ForInStatement)
 
@@ -708,7 +750,12 @@ class CaseClause: public ZoneObject {
 
 class SwitchStatement: public BreakableStatement {
  public:
-  inline SwitchStatement(Isolate* isolate, ZoneStringList* labels);
+  SwitchStatement(Isolate* isolate, ZoneStringList* labels)
+      : BreakableStatement(isolate, labels, TARGET_FOR_ANONYMOUS),
+        tag_(NULL),
+        cases_(NULL) {
+  }
+
 
   DECLARE_NODE_TYPE(SwitchStatement)
 
@@ -796,18 +843,25 @@ class TargetCollector: public AstNode {
 
 class TryStatement: public Statement {
  public:
-  explicit TryStatement(Block* try_block)
-      : try_block_(try_block), escaping_targets_(NULL) { }
+  explicit TryStatement(int index, Block* try_block)
+      : index_(index),
+        try_block_(try_block),
+        escaping_targets_(NULL) {
+  }
 
   void set_escaping_targets(ZoneList<Label*>* targets) {
     escaping_targets_ = targets;
   }
 
+  int index() const { return index_; }
   Block* try_block() const { return try_block_; }
   ZoneList<Label*>* escaping_targets() const { return escaping_targets_; }
   virtual bool IsInlineable() const;
 
  private:
+  // Unique (per-function) index of this handler.  This is not an AST ID.
+  int index_;
+
   Block* try_block_;
   ZoneList<Label*>* escaping_targets_;
 };
@@ -815,11 +869,12 @@ class TryStatement: public Statement {
 
 class TryCatchStatement: public TryStatement {
  public:
-  TryCatchStatement(Block* try_block,
+  TryCatchStatement(int index,
+                    Block* try_block,
                     Scope* scope,
                     Variable* variable,
                     Block* catch_block)
-      : TryStatement(try_block),
+      : TryStatement(index, try_block),
         scope_(scope),
         variable_(variable),
         catch_block_(catch_block) {
@@ -841,8 +896,8 @@ class TryCatchStatement: public TryStatement {
 
 class TryFinallyStatement: public TryStatement {
  public:
-  TryFinallyStatement(Block* try_block, Block* finally_block)
-      : TryStatement(try_block),
+  TryFinallyStatement(int index, Block* try_block, Block* finally_block)
+      : TryStatement(index, try_block),
         finally_block_(finally_block) { }
 
   DECLARE_NODE_TYPE(TryFinallyStatement)
@@ -1605,27 +1660,30 @@ class FunctionLiteral: public Expression {
                   ZoneList<Statement*>* body,
                   int materialized_literal_count,
                   int expected_property_count,
+                  int handler_count,
                   bool has_only_simple_this_property_assignments,
                   Handle<FixedArray> this_property_assignments,
-                  int num_parameters,
+                  int parameter_count,
                   Type type,
                   bool has_duplicate_parameters)
       : Expression(isolate),
         name_(name),
         scope_(scope),
         body_(body),
+        this_property_assignments_(this_property_assignments),
+        inferred_name_(isolate->factory()->empty_string()),
         materialized_literal_count_(materialized_literal_count),
         expected_property_count_(expected_property_count),
-        has_only_simple_this_property_assignments_(
-            has_only_simple_this_property_assignments),
-        this_property_assignments_(this_property_assignments),
-        num_parameters_(num_parameters),
-        function_token_position_(RelocInfo::kNoPosition),
-        inferred_name_(HEAP->empty_string()),
-        is_expression_(type != DECLARATION),
-        is_anonymous_(type == ANONYMOUS_EXPRESSION),
-        pretenure_(false),
-        has_duplicate_parameters_(has_duplicate_parameters) {
+        handler_count_(handler_count),
+        parameter_count_(parameter_count),
+        function_token_position_(RelocInfo::kNoPosition) {
+    bitfield_ =
+        HasOnlySimpleThisPropertyAssignments::encode(
+            has_only_simple_this_property_assignments) |
+        IsExpression::encode(type != DECLARATION) |
+        IsAnonymous::encode(type == ANONYMOUS_EXPRESSION) |
+        Pretenure::encode(false) |
+        HasDuplicateParameters::encode(has_duplicate_parameters);
   }
 
   DECLARE_NODE_TYPE(FunctionLiteral)
@@ -1637,20 +1695,21 @@ class FunctionLiteral: public Expression {
   int function_token_position() const { return function_token_position_; }
   int start_position() const;
   int end_position() const;
-  bool is_expression() const { return is_expression_; }
-  bool is_anonymous() const { return is_anonymous_; }
+  bool is_expression() const { return IsExpression::decode(bitfield_); }
+  bool is_anonymous() const { return IsAnonymous::decode(bitfield_); }
   bool strict_mode() const { return strict_mode_flag() == kStrictMode; }
   StrictModeFlag strict_mode_flag() const;
 
   int materialized_literal_count() { return materialized_literal_count_; }
   int expected_property_count() { return expected_property_count_; }
+  int handler_count() { return handler_count_; }
   bool has_only_simple_this_property_assignments() {
-      return has_only_simple_this_property_assignments_;
+    return HasOnlySimpleThisPropertyAssignments::decode(bitfield_);
   }
   Handle<FixedArray> this_property_assignments() {
       return this_property_assignments_;
   }
-  int num_parameters() { return num_parameters_; }
+  int parameter_count() { return parameter_count_; }
 
   bool AllowsLazyCompilation();
 
@@ -1664,29 +1723,33 @@ class FunctionLiteral: public Expression {
     inferred_name_ = inferred_name;
   }
 
-  bool pretenure() { return pretenure_; }
-  void set_pretenure(bool value) { pretenure_ = value; }
+  bool pretenure() { return Pretenure::decode(bitfield_); }
+  void set_pretenure() { bitfield_ |= Pretenure::encode(true); }
   virtual bool IsInlineable() const;
 
-  bool has_duplicate_parameters() { return has_duplicate_parameters_; }
+  bool has_duplicate_parameters() {
+    return HasDuplicateParameters::decode(bitfield_);
+  }
 
  private:
   Handle<String> name_;
   Scope* scope_;
   ZoneList<Statement*>* body_;
+  Handle<FixedArray> this_property_assignments_;
+  Handle<String> inferred_name_;
+
   int materialized_literal_count_;
   int expected_property_count_;
-  bool has_only_simple_this_property_assignments_;
-  Handle<FixedArray> this_property_assignments_;
-  int num_parameters_;
-  int start_position_;
-  int end_position_;
+  int handler_count_;
+  int parameter_count_;
   int function_token_position_;
-  Handle<String> inferred_name_;
-  bool is_expression_;
-  bool is_anonymous_;
-  bool pretenure_;
-  bool has_duplicate_parameters_;
+
+  unsigned bitfield_;
+  class HasOnlySimpleThisPropertyAssignments: public BitField<bool, 0, 1> {};
+  class IsExpression: public BitField<bool, 1, 1> {};
+  class IsAnonymous: public BitField<bool, 2, 1> {};
+  class Pretenure: public BitField<bool, 3, 1> {};
+  class HasDuplicateParameters: public BitField<bool, 4, 1> {};
 };
 
 

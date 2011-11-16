@@ -31,6 +31,7 @@
 #include "allocation.h"
 #include "builtins.h"
 #include "list.h"
+#include "property-details.h"
 #include "smart-array-pointer.h"
 #include "unicode-inl.h"
 #if V8_TARGET_ARCH_ARM
@@ -124,18 +125,6 @@
 //  HeapObject: [32 bit direct pointer] (4 byte aligned) | 01
 //  Failure:    [30 bit signed int] 11
 
-// Ecma-262 3rd 8.6.1
-enum PropertyAttributes {
-  NONE              = v8::None,
-  READ_ONLY         = v8::ReadOnly,
-  DONT_ENUM         = v8::DontEnum,
-  DONT_DELETE       = v8::DontDelete,
-  ABSENT            = 16  // Used in runtime to indicate a property is absent.
-  // ABSENT can never be stored in or returned from a descriptor's attributes
-  // bitfield.  It is only used as a return value meaning the attributes of
-  // a non-existent property.
-};
-
 namespace v8 {
 namespace internal {
 
@@ -178,70 +167,8 @@ static const int kElementsKindCount =
 
 void PrintElementsKind(FILE* out, ElementsKind kind);
 
-// PropertyDetails captures type and attributes for a property.
-// They are used both in property dictionaries and instance descriptors.
-class PropertyDetails BASE_EMBEDDED {
- public:
-  PropertyDetails(PropertyAttributes attributes,
-                  PropertyType type,
-                  int index = 0) {
-    ASSERT(TypeField::is_valid(type));
-    ASSERT(AttributesField::is_valid(attributes));
-    ASSERT(StorageField::is_valid(index));
-
-    value_ = TypeField::encode(type)
-        | AttributesField::encode(attributes)
-        | StorageField::encode(index);
-
-    ASSERT(type == this->type());
-    ASSERT(attributes == this->attributes());
-    ASSERT(index == this->index());
-  }
-
-  // Conversion for storing details as Object*.
-  explicit inline PropertyDetails(Smi* smi);
-  inline Smi* AsSmi();
-
-  PropertyType type() { return TypeField::decode(value_); }
-
-  bool IsTransition() {
-    PropertyType t = type();
-    ASSERT(t != INTERCEPTOR);
-    return IsTransitionType(t);
-  }
-
-  bool IsProperty() {
-    return type() < FIRST_PHANTOM_PROPERTY_TYPE;
-  }
-
-  PropertyAttributes attributes() { return AttributesField::decode(value_); }
-
-  int index() { return StorageField::decode(value_); }
-
-  inline PropertyDetails AsDeleted();
-
-  static bool IsValidIndex(int index) {
-    return StorageField::is_valid(index);
-  }
-
-  bool IsReadOnly() { return (attributes() & READ_ONLY) != 0; }
-  bool IsDontDelete() { return (attributes() & DONT_DELETE) != 0; }
-  bool IsDontEnum() { return (attributes() & DONT_ENUM) != 0; }
-  bool IsDeleted() { return DeletedField::decode(value_) != 0;}
-
-  // Bit fields in value_ (type, shift, size). Must be public so the
-  // constants can be embedded in generated code.
-  class TypeField:       public BitField<PropertyType,       0, 4> {};
-  class AttributesField: public BitField<PropertyAttributes, 4, 3> {};
-  class DeletedField:    public BitField<uint32_t,           7, 1> {};
-  class StorageField:    public BitField<uint32_t,           8, 32-8> {};
-
-  static const int kInitialIndex = 1;
-
- private:
-  uint32_t value_;
-};
-
+inline bool IsMoreGeneralElementsKindTransition(ElementsKind from_kind,
+                                                ElementsKind to_kind);
 
 // Setter that skips the write barrier if mode is SKIP_WRITE_BARRIER.
 enum WriteBarrierMode { SKIP_WRITE_BARRIER, UPDATE_WRITE_BARRIER };
@@ -1734,7 +1661,6 @@ class JSObject: public JSReceiver {
   MUST_USE_RESULT MaybeObject* SetFastDoubleElementsCapacityAndLength(
       int capacity,
       int length);
-  MUST_USE_RESULT MaybeObject* SetSlowElements(Object* length);
 
   // Lookup interceptors are used for handling properties controlled by host
   // objects.
@@ -1757,6 +1683,7 @@ class JSObject: public JSReceiver {
   inline int GetInternalFieldOffset(int index);
   inline Object* GetInternalField(int index);
   inline void SetInternalField(int index, Object* value);
+  inline void SetInternalField(int index, Smi* value);
 
   // The following lookup functions skip interceptors.
   void LocalLookupRealNamedProperty(String* name, LookupResult* result);
@@ -1959,6 +1886,11 @@ class JSObject: public JSReceiver {
   void IncrementSpillStatistics(SpillInformation* info);
 #endif
   Object* SlowReverseLookup(Object* value);
+
+  // Getters and setters are stored in a fixed array property.
+  // These are constants for their indices.
+  static const int kGetterIndex = 0;
+  static const int kSetterIndex = 1;
 
   // Maximal number of fast properties for the JSObject. Used to
   // restrict the number of map transitions to avoid an explosion in
@@ -2986,9 +2918,6 @@ class NumberDictionary: public Dictionary<NumberDictionaryShape, uint32_t> {
   // requires_slow_elements returns false.
   inline uint32_t max_number_key();
 
-  // Remove all entries were key is a number and (from <= key && key < to).
-  void RemoveNumberEntries(uint32_t from, uint32_t to);
-
   // Bit masks.
   static const int kRequiresSlowElementsMask = 1;
   static const int kRequiresSlowElementsTagSize = 1;
@@ -3746,7 +3675,8 @@ class DeoptimizationInputData: public FixedArray {
   static const int kAstIdOffset = 0;
   static const int kTranslationIndexOffset = 1;
   static const int kArgumentsStackHeightOffset = 2;
-  static const int kDeoptEntrySize = 3;
+  static const int kPcOffset = 3;
+  static const int kDeoptEntrySize = 4;
 
   // Simple element accessors.
 #define DEFINE_ELEMENT_ACCESSORS(name, type)      \
@@ -3782,6 +3712,7 @@ class DeoptimizationInputData: public FixedArray {
   DEFINE_ENTRY_ACCESSORS(AstId, Smi)
   DEFINE_ENTRY_ACCESSORS(TranslationIndex, Smi)
   DEFINE_ENTRY_ACCESSORS(ArgumentsStackHeight, Smi)
+  DEFINE_ENTRY_ACCESSORS(Pc, Smi)
 
 #undef DEFINE_ENTRY_ACCESSORS
 
@@ -3907,6 +3838,9 @@ class Code: public HeapObject {
   // [relocation_info]: Code relocation information
   DECL_ACCESSORS(relocation_info, ByteArray)
   void InvalidateRelocation();
+
+  // [handler_table]: Fixed array containing offsets of exception handlers.
+  DECL_ACCESSORS(handler_table, FixedArray)
 
   // [deoptimization_data]: Array containing data for deopt.
   DECL_ACCESSORS(deoptimization_data, FixedArray)
@@ -4136,8 +4070,9 @@ class Code: public HeapObject {
   // Layout description.
   static const int kInstructionSizeOffset = HeapObject::kHeaderSize;
   static const int kRelocationInfoOffset = kInstructionSizeOffset + kIntSize;
+  static const int kHandlerTableOffset = kRelocationInfoOffset + kPointerSize;
   static const int kDeoptimizationDataOffset =
-      kRelocationInfoOffset + kPointerSize;
+      kHandlerTableOffset + kPointerSize;
   static const int kNextCodeFlushingCandidateOffset =
       kDeoptimizationDataOffset + kPointerSize;
   static const int kFlagsOffset =
@@ -5922,12 +5857,16 @@ class CompilationCacheTable: public HashTable<CompilationCacheShape,
  public:
   // Find cached value for a string key, otherwise return null.
   Object* Lookup(String* src);
-  Object* LookupEval(String* src, Context* context, StrictModeFlag strict_mode);
+  Object* LookupEval(String* src,
+                     Context* context,
+                     StrictModeFlag strict_mode,
+                     int scope_position);
   Object* LookupRegExp(String* source, JSRegExp::Flags flags);
   MaybeObject* Put(String* src, Object* value);
   MaybeObject* PutEval(String* src,
                        Context* context,
-                       SharedFunctionInfo* value);
+                       SharedFunctionInfo* value,
+                       int scope_position);
   MaybeObject* PutRegExp(String* src, JSRegExp::Flags flags, FixedArray* value);
 
   // Remove given value from cache.
@@ -7888,6 +7827,8 @@ class ObjectVisitor BASE_EMBEDDED {
   // heap) in the half-open range [start, end). Any or all of the values
   // may be modified on return.
   virtual void VisitExternalReferences(Address* start, Address* end) {}
+
+  virtual void VisitExternalReference(RelocInfo* rinfo);
 
   inline void VisitExternalReference(Address* p) {
     VisitExternalReferences(p, p + 1);

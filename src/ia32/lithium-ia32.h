@@ -368,17 +368,7 @@ class LGoto: public LTemplateInstruction<0, 0, 0> {
 
 class LLazyBailout: public LTemplateInstruction<0, 0, 0> {
  public:
-  LLazyBailout() : gap_instructions_size_(0) { }
-
   DECLARE_CONCRETE_INSTRUCTION(LazyBailout, "lazy-bailout")
-
-  void set_gap_instructions_size(int gap_instructions_size) {
-    gap_instructions_size_ = gap_instructions_size;
-  }
-  int gap_instructions_size() { return gap_instructions_size_; }
-
- private:
-  int gap_instructions_size_;
 };
 
 
@@ -1454,17 +1444,19 @@ class LCallNamed: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LCallFunction: public LTemplateInstruction<1, 1, 0> {
+class LCallFunction: public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LCallFunction(LOperand* context) {
+  explicit LCallFunction(LOperand* context, LOperand* function) {
     inputs_[0] = context;
+    inputs_[1] = function;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(CallFunction, "call-function")
   DECLARE_HYDROGEN_ACCESSOR(CallFunction)
 
   LOperand* context() { return inputs_[0]; }
-  int arity() const { return hydrogen()->argument_count() - 2; }
+  LOperand* function() { return inputs_[1]; }
+  int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 

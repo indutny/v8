@@ -1679,7 +1679,7 @@ Representation HInferRepresentation::TryChange(HValue* value) {
   }
 
   // Prefer unboxing over boxing, the latter is more expensive.
-  if (tagged_count > non_tagged_count) Representation::None();
+  if (tagged_count > non_tagged_count) return Representation::None();
 
   // Prefer Integer32 over Double, if possible.
   if (int32_count > 0 && value->IsConvertibleToInteger()) {
@@ -5210,7 +5210,8 @@ void HGraphBuilder::VisitCall(Call* expr) {
       }
 
     } else {
-      CHECK_ALIVE(VisitArgument(expr->expression()));
+      CHECK_ALIVE(VisitForValue(expr->expression()));
+      HValue* function = Top();
       HValue* context = environment()->LookupContext();
       HGlobalObject* global_object = new(zone()) HGlobalObject(context);
       HGlobalReceiver* receiver = new(zone()) HGlobalReceiver(global_object);
@@ -5219,9 +5220,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
       PushAndAdd(new(zone()) HPushArgument(receiver));
       CHECK_ALIVE(VisitArgumentList(expr->arguments()));
 
-      // The function to call is treated as an argument to the call function
-      // stub.
-      call = new(zone()) HCallFunction(context, argument_count + 1);
+      call = new(zone()) HCallFunction(context, function, argument_count);
       Drop(argument_count + 1);
     }
   }
@@ -6320,7 +6319,44 @@ void HGraphBuilder::GenerateValueOf(CallRuntime* call) {
 
 
 void HGraphBuilder::GenerateSetValueOf(CallRuntime* call) {
-  return Bailout("inlined runtime function: SetValueOf");
+  ASSERT(call->arguments()->length() == 2);
+  CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
+  CHECK_ALIVE(VisitForValue(call->arguments()->at(1)));
+  HValue* value = Pop();
+  HValue* object = Pop();
+  // Check if object is a not a smi.
+  HIsSmiAndBranch* smicheck = new(zone()) HIsSmiAndBranch(object);
+  HBasicBlock* if_smi = graph()->CreateBasicBlock();
+  HBasicBlock* if_heap_object = graph()->CreateBasicBlock();
+  HBasicBlock* join = graph()->CreateBasicBlock();
+  smicheck->SetSuccessorAt(0, if_smi);
+  smicheck->SetSuccessorAt(1, if_heap_object);
+  current_block()->Finish(smicheck);
+  if_smi->Goto(join);
+
+  // Check if object is a JSValue.
+  set_current_block(if_heap_object);
+  HHasInstanceTypeAndBranch* typecheck =
+      new(zone()) HHasInstanceTypeAndBranch(object, JS_VALUE_TYPE);
+  HBasicBlock* if_js_value = graph()->CreateBasicBlock();
+  HBasicBlock* not_js_value = graph()->CreateBasicBlock();
+  typecheck->SetSuccessorAt(0, if_js_value);
+  typecheck->SetSuccessorAt(1, not_js_value);
+  current_block()->Finish(typecheck);
+  not_js_value->Goto(join);
+
+  // Create in-object property store to kValueOffset.
+  set_current_block(if_js_value);
+  Handle<String> name = isolate()->factory()->undefined_symbol();
+  AddInstruction(new HStoreNamedField(object,
+                                      name,
+                                      value,
+                                      true,  // in-object store.
+                                      JSValue::kValueOffset));
+  if_js_value->Goto(join);
+  join->SetJoinId(call->id());
+  set_current_block(join);
+  return ast_context()->ReturnValue(value);
 }
 
 
@@ -6483,12 +6519,37 @@ void HGraphBuilder::GenerateCallFunction(CallRuntime* call) {
     CHECK_ALIVE(VisitArgument(call->arguments()->at(i)));
   }
   CHECK_ALIVE(VisitForValue(call->arguments()->last()));
+
   HValue* function = Pop();
   HValue* context = environment()->LookupContext();
-  HInvokeFunction* result =
-      new(zone()) HInvokeFunction(context, function, arg_count);
+
+  // Branch for function proxies, or other non-functions.
+  HHasInstanceTypeAndBranch* typecheck =
+      new(zone()) HHasInstanceTypeAndBranch(function, JS_FUNCTION_TYPE);
+  HBasicBlock* if_jsfunction = graph()->CreateBasicBlock();
+  HBasicBlock* if_nonfunction = graph()->CreateBasicBlock();
+  HBasicBlock* join = graph()->CreateBasicBlock();
+  typecheck->SetSuccessorAt(0, if_jsfunction);
+  typecheck->SetSuccessorAt(1, if_nonfunction);
+  current_block()->Finish(typecheck);
+
+  set_current_block(if_jsfunction);
+  HInstruction* invoke_result = AddInstruction(
+      new(zone()) HInvokeFunction(context, function, arg_count));
   Drop(arg_count);
-  return ast_context()->ReturnInstruction(result, call->id());
+  Push(invoke_result);
+  if_jsfunction->Goto(join);
+
+  set_current_block(if_nonfunction);
+  HInstruction* call_result = AddInstruction(
+      new(zone()) HCallFunction(context, function, arg_count));
+  Drop(arg_count);
+  Push(call_result);
+  if_nonfunction->Goto(join);
+
+  set_current_block(join);
+  join->SetJoinId(call->id());
+  return ast_context()->ReturnValue(Pop());
 }
 
 

@@ -103,11 +103,6 @@ void PrintElementsKind(FILE* out, ElementsKind kind) {
 }
 
 
-// Getters and setters are stored in a fixed array property.  These are
-// constants for their indices.
-const int kGetterIndex = 0;
-const int kSetterIndex = 1;
-
 MUST_USE_RESULT static MaybeObject* CreateJSValue(JSFunction* constructor,
                                                   Object* value) {
   Object* result;
@@ -4636,7 +4631,11 @@ Object* JSObject::LookupAccessor(String* name, bool is_getter) {
   }
 
   // Make the lookup and include prototypes.
-  int accessor_index = is_getter ? kGetterIndex : kSetterIndex;
+  // Introducing constants below makes static constants usage purely static
+  // and avoids linker errors in debug build using gcc.
+  const int getter_index = kGetterIndex;
+  const int setter_index = kSetterIndex;
+  int accessor_index = is_getter ? getter_index : setter_index;
   uint32_t index = 0;
   if (name->AsArrayIndex(&index)) {
     for (Object* obj = this;
@@ -5826,12 +5825,9 @@ SmartArrayPointer<char> String::ToCString(AllowNullsFlag allow_nulls,
   buffer->Reset(offset, this);
   int character_position = offset;
   int utf8_bytes = 0;
-  while (buffer->has_more()) {
+  while (buffer->has_more() && character_position++ < offset + length) {
     uint16_t character = buffer->GetNext();
-    if (character_position < offset + length) {
-      utf8_bytes += unibrow::Utf8::Length(character);
-    }
-    character_position++;
+    utf8_bytes += unibrow::Utf8::Length(character);
   }
 
   if (length_return) {
@@ -5845,16 +5841,13 @@ SmartArrayPointer<char> String::ToCString(AllowNullsFlag allow_nulls,
   buffer->Seek(offset);
   character_position = offset;
   int utf8_byte_position = 0;
-  while (buffer->has_more()) {
+  while (buffer->has_more() && character_position++ < offset + length) {
     uint16_t character = buffer->GetNext();
-    if (character_position < offset + length) {
-      if (allow_nulls == DISALLOW_NULLS && character == 0) {
-        character = ' ';
-      }
-      utf8_byte_position +=
-          unibrow::Utf8::Encode(result + utf8_byte_position, character);
+    if (allow_nulls == DISALLOW_NULLS && character == 0) {
+      character = ' ';
     }
-    character_position++;
+    utf8_byte_position +=
+        unibrow::Utf8::Encode(result + utf8_byte_position, character);
   }
   result[utf8_byte_position] = 0;
   return SmartArrayPointer<char>(result);
@@ -7724,6 +7717,10 @@ void ObjectVisitor::VisitEmbeddedPointer(RelocInfo* rinfo) {
   VisitPointer(rinfo->target_object_address());
 }
 
+void ObjectVisitor::VisitExternalReference(RelocInfo* rinfo) {
+  Address* p = rinfo->target_reference_address();
+  VisitExternalReferences(p, p + 1);
+}
 
 void Code::InvalidateRelocation() {
   set_relocation_info(GetHeap()->empty_byte_array());
@@ -7869,11 +7866,14 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
   PrintF(out, "Deoptimization Input Data (deopt points = %d)\n", deopt_count);
   if (0 == deopt_count) return;
 
-  PrintF(out, "%6s  %6s  %6s  %12s\n", "index", "ast id", "argc",
+  PrintF(out, "%6s  %6s  %6s %6s %12s\n", "index", "ast id", "argc", "pc",
          FLAG_print_code_verbose ? "commands" : "");
   for (int i = 0; i < deopt_count; i++) {
-    PrintF(out, "%6d  %6d  %6d",
-           i, AstId(i)->value(), ArgumentsStackHeight(i)->value());
+    PrintF(out, "%6d  %6d  %6d %6d",
+           i,
+           AstId(i)->value(),
+           ArgumentsStackHeight(i)->value(),
+           Pc(i)->value());
 
     if (!FLAG_print_code_verbose) {
       PrintF(out, "\n");
@@ -8351,61 +8351,6 @@ MaybeObject* JSObject::SetFastDoubleElementsCapacityAndLength(
 }
 
 
-MaybeObject* JSObject::SetSlowElements(Object* len) {
-  // We should never end in here with a pixel or external array.
-  ASSERT(!HasExternalArrayElements());
-
-  uint32_t new_length = static_cast<uint32_t>(len->Number());
-
-  FixedArrayBase* old_elements = elements();
-  ElementsKind elements_kind = GetElementsKind();
-  switch (elements_kind) {
-    case FAST_SMI_ONLY_ELEMENTS:
-    case FAST_ELEMENTS:
-    case FAST_DOUBLE_ELEMENTS: {
-      // Make sure we never try to shrink dense arrays into sparse arrays.
-      ASSERT(static_cast<uint32_t>(old_elements->length()) <= new_length);
-      MaybeObject* result = NormalizeElements();
-      if (result->IsFailure()) return result;
-
-      // Update length for JSArrays.
-      if (IsJSArray()) JSArray::cast(this)->set_length(len);
-      break;
-    }
-    case DICTIONARY_ELEMENTS: {
-      if (IsJSArray()) {
-        uint32_t old_length =
-            static_cast<uint32_t>(JSArray::cast(this)->length()->Number());
-        element_dictionary()->RemoveNumberEntries(new_length, old_length),
-        JSArray::cast(this)->set_length(len);
-      }
-      break;
-    }
-    case NON_STRICT_ARGUMENTS_ELEMENTS:
-      UNIMPLEMENTED();
-      break;
-    case EXTERNAL_BYTE_ELEMENTS:
-    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-    case EXTERNAL_SHORT_ELEMENTS:
-    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-    case EXTERNAL_INT_ELEMENTS:
-    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-    case EXTERNAL_FLOAT_ELEMENTS:
-    case EXTERNAL_DOUBLE_ELEMENTS:
-    case EXTERNAL_PIXEL_ELEMENTS:
-      UNREACHABLE();
-      break;
-  }
-
-  if (FLAG_trace_elements_transitions) {
-    PrintElementsTransition(stdout, elements_kind, old_elements,
-                            DICTIONARY_ELEMENTS, elements());
-  }
-
-  return this;
-}
-
-
 MaybeObject* JSArray::Initialize(int capacity) {
   Heap* heap = GetHeap();
   ASSERT(capacity >= 0);
@@ -8437,165 +8382,10 @@ void JSArray::Expand(int required_size) {
 }
 
 
-static Failure* ArrayLengthRangeError(Heap* heap) {
-  HandleScope scope(heap->isolate());
-  return heap->isolate()->Throw(
-      *FACTORY->NewRangeError("invalid_array_length",
-          HandleVector<Object>(NULL, 0)));
-}
-
-
 MaybeObject* JSObject::SetElementsLength(Object* len) {
   // We should never end in here with a pixel or external array.
   ASSERT(AllowsSetElementsLength());
-
-  MaybeObject* maybe_smi_length = len->ToSmi();
-  Object* smi_length = Smi::FromInt(0);
-  if (maybe_smi_length->ToObject(&smi_length) && smi_length->IsSmi()) {
-    const int value = Smi::cast(smi_length)->value();
-    if (value < 0) return ArrayLengthRangeError(GetHeap());
-    ElementsKind elements_kind = GetElementsKind();
-    switch (elements_kind) {
-      case FAST_SMI_ONLY_ELEMENTS:
-      case FAST_ELEMENTS:
-      case FAST_DOUBLE_ELEMENTS: {
-        int old_capacity = FixedArrayBase::cast(elements())->length();
-        if (value <= old_capacity) {
-          if (IsJSArray()) {
-            Object* obj;
-            if (elements_kind == FAST_ELEMENTS ||
-                elements_kind == FAST_SMI_ONLY_ELEMENTS) {
-              MaybeObject* maybe_obj = EnsureWritableFastElements();
-              if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-            }
-            if (2 * value <= old_capacity) {
-              // If more than half the elements won't be used, trim the array.
-              if (value == 0) {
-                initialize_elements();
-              } else {
-                Address filler_start;
-                int filler_size;
-                if (elements_kind == FAST_ELEMENTS ||
-                    elements_kind == FAST_SMI_ONLY_ELEMENTS) {
-                  FixedArray* fast_elements = FixedArray::cast(elements());
-                  fast_elements->set_length(value);
-                  filler_start = fast_elements->address() +
-                      FixedArray::OffsetOfElementAt(value);
-                  filler_size = (old_capacity - value) * kPointerSize;
-                } else {
-                  ASSERT(GetElementsKind() == FAST_DOUBLE_ELEMENTS);
-                  FixedDoubleArray* fast_double_elements =
-                      FixedDoubleArray::cast(elements());
-                  fast_double_elements->set_length(value);
-                  filler_start = fast_double_elements->address() +
-                      FixedDoubleArray::OffsetOfElementAt(value);
-                  filler_size = (old_capacity - value) * kDoubleSize;
-                }
-                GetHeap()->CreateFillerObjectAt(filler_start, filler_size);
-              }
-            } else {
-              // Otherwise, fill the unused tail with holes.
-              int old_length = FastD2I(JSArray::cast(this)->length()->Number());
-              if (elements_kind == FAST_ELEMENTS ||
-                  elements_kind == FAST_SMI_ONLY_ELEMENTS) {
-                FixedArray* fast_elements = FixedArray::cast(elements());
-                for (int i = value; i < old_length; i++) {
-                  fast_elements->set_the_hole(i);
-                }
-              } else {
-                ASSERT(elements_kind == FAST_DOUBLE_ELEMENTS);
-                FixedDoubleArray* fast_double_elements =
-                    FixedDoubleArray::cast(elements());
-                for (int i = value; i < old_length; i++) {
-                  fast_double_elements->set_the_hole(i);
-                }
-              }
-            }
-            JSArray::cast(this)->set_length(Smi::cast(smi_length));
-          }
-          return this;
-        }
-        int min = NewElementsCapacity(old_capacity);
-        int new_capacity = value > min ? value : min;
-        if (!ShouldConvertToSlowElements(new_capacity)) {
-          MaybeObject* result;
-          if (elements_kind == FAST_ELEMENTS ||
-              elements_kind == FAST_SMI_ONLY_ELEMENTS) {
-            SetFastElementsCapacityMode set_capacity_mode =
-                elements_kind == FAST_SMI_ONLY_ELEMENTS
-                    ? kAllowSmiOnlyElements
-                    : kDontAllowSmiOnlyElements;
-            result = SetFastElementsCapacityAndLength(new_capacity,
-                                                      value,
-                                                      set_capacity_mode);
-          }  else {
-            ASSERT(elements_kind == FAST_DOUBLE_ELEMENTS);
-            result = SetFastDoubleElementsCapacityAndLength(new_capacity,
-                                                            value);
-          }
-          if (result->IsFailure()) return result;
-          return this;
-        }
-        break;
-      }
-      case DICTIONARY_ELEMENTS: {
-        if (IsJSArray()) {
-          if (value == 0) {
-            // If the length of a slow array is reset to zero, we clear
-            // the array and flush backing storage. This has the added
-            // benefit that the array returns to fast mode.
-            Object* obj;
-            { MaybeObject* maybe_obj = ResetElements();
-              if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-            }
-          } else {
-            // Remove deleted elements.
-            uint32_t old_length =
-            static_cast<uint32_t>(JSArray::cast(this)->length()->Number());
-            element_dictionary()->RemoveNumberEntries(value, old_length);
-          }
-          JSArray::cast(this)->set_length(Smi::cast(smi_length));
-        }
-        return this;
-      }
-      case NON_STRICT_ARGUMENTS_ELEMENTS:
-      case EXTERNAL_BYTE_ELEMENTS:
-      case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-      case EXTERNAL_SHORT_ELEMENTS:
-      case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-      case EXTERNAL_INT_ELEMENTS:
-      case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-      case EXTERNAL_FLOAT_ELEMENTS:
-      case EXTERNAL_DOUBLE_ELEMENTS:
-      case EXTERNAL_PIXEL_ELEMENTS:
-        UNREACHABLE();
-        break;
-    }
-  }
-
-  // General slow case.
-  if (len->IsNumber()) {
-    uint32_t length;
-    if (len->ToArrayIndex(&length)) {
-      return SetSlowElements(len);
-    } else {
-      return ArrayLengthRangeError(GetHeap());
-    }
-  }
-
-  // len is not a number so make the array size one and
-  // set only element to len.
-  Object* obj;
-  MaybeObject* maybe_obj = GetHeap()->AllocateFixedArray(1);
-  if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  FixedArray::cast(obj)->set(0, len);
-
-  maybe_obj = EnsureCanContainElements(&len, 1);
-  if (maybe_obj->IsFailure()) return maybe_obj;
-
-  if (IsJSArray()) JSArray::cast(this)->set_length(Smi::FromInt(1));
-  set_elements(FixedArray::cast(obj));
-  return this;
+  return GetElementsAccessor()->SetLength(this, len);
 }
 
 
@@ -9713,6 +9503,9 @@ MUST_USE_RESULT MaybeObject* JSObject::TransitionElementsKind(
       MaybeObject* maybe_new_map = GetElementsTransitionMap(FAST_ELEMENTS);
       Map* new_map;
       if (!maybe_new_map->To(&new_map)) return maybe_new_map;
+      if (FLAG_trace_elements_transitions) {
+        PrintElementsTransition(stdout, from_kind, elms, FAST_ELEMENTS, elms);
+      }
       set_map(new_map);
       return this;
     }
@@ -10507,74 +10300,83 @@ class StringSharedKey : public HashTableKey {
  public:
   StringSharedKey(String* source,
                   SharedFunctionInfo* shared,
-                  StrictModeFlag strict_mode)
+                  StrictModeFlag strict_mode,
+                  int scope_position)
       : source_(source),
         shared_(shared),
-        strict_mode_(strict_mode) { }
+        strict_mode_(strict_mode),
+        scope_position_(scope_position) { }
 
   bool IsMatch(Object* other) {
     if (!other->IsFixedArray()) return false;
-    FixedArray* pair = FixedArray::cast(other);
-    SharedFunctionInfo* shared = SharedFunctionInfo::cast(pair->get(0));
+    FixedArray* other_array = FixedArray::cast(other);
+    SharedFunctionInfo* shared = SharedFunctionInfo::cast(other_array->get(0));
     if (shared != shared_) return false;
-    int strict_unchecked = Smi::cast(pair->get(2))->value();
+    int strict_unchecked = Smi::cast(other_array->get(2))->value();
     ASSERT(strict_unchecked == kStrictMode ||
            strict_unchecked == kNonStrictMode);
     StrictModeFlag strict_mode = static_cast<StrictModeFlag>(strict_unchecked);
     if (strict_mode != strict_mode_) return false;
-    String* source = String::cast(pair->get(1));
+    int scope_position = Smi::cast(other_array->get(3))->value();
+    if (scope_position != scope_position_) return false;
+    String* source = String::cast(other_array->get(1));
     return source->Equals(source_);
   }
 
   static uint32_t StringSharedHashHelper(String* source,
                                          SharedFunctionInfo* shared,
-                                         StrictModeFlag strict_mode) {
+                                         StrictModeFlag strict_mode,
+                                         int scope_position) {
     uint32_t hash = source->Hash();
     if (shared->HasSourceCode()) {
       // Instead of using the SharedFunctionInfo pointer in the hash
       // code computation, we use a combination of the hash of the
-      // script source code and the start and end positions.  We do
-      // this to ensure that the cache entries can survive garbage
+      // script source code and the start position of the calling scope.
+      // We do this to ensure that the cache entries can survive garbage
       // collection.
       Script* script = Script::cast(shared->script());
       hash ^= String::cast(script->source())->Hash();
       if (strict_mode == kStrictMode) hash ^= 0x8000;
-      hash += shared->start_position();
+      hash += scope_position;
     }
     return hash;
   }
 
   uint32_t Hash() {
-    return StringSharedHashHelper(source_, shared_, strict_mode_);
+    return StringSharedHashHelper(
+        source_, shared_, strict_mode_, scope_position_);
   }
 
   uint32_t HashForObject(Object* obj) {
-    FixedArray* pair = FixedArray::cast(obj);
-    SharedFunctionInfo* shared = SharedFunctionInfo::cast(pair->get(0));
-    String* source = String::cast(pair->get(1));
-    int strict_unchecked = Smi::cast(pair->get(2))->value();
+    FixedArray* other_array = FixedArray::cast(obj);
+    SharedFunctionInfo* shared = SharedFunctionInfo::cast(other_array->get(0));
+    String* source = String::cast(other_array->get(1));
+    int strict_unchecked = Smi::cast(other_array->get(2))->value();
     ASSERT(strict_unchecked == kStrictMode ||
            strict_unchecked == kNonStrictMode);
     StrictModeFlag strict_mode = static_cast<StrictModeFlag>(strict_unchecked);
-    return StringSharedHashHelper(source, shared, strict_mode);
+    int scope_position = Smi::cast(other_array->get(3))->value();
+    return StringSharedHashHelper(source, shared, strict_mode, scope_position);
   }
 
   MUST_USE_RESULT MaybeObject* AsObject() {
     Object* obj;
-    { MaybeObject* maybe_obj = source_->GetHeap()->AllocateFixedArray(3);
+    { MaybeObject* maybe_obj = source_->GetHeap()->AllocateFixedArray(4);
       if (!maybe_obj->ToObject(&obj)) return maybe_obj;
     }
-    FixedArray* pair = FixedArray::cast(obj);
-    pair->set(0, shared_);
-    pair->set(1, source_);
-    pair->set(2, Smi::FromInt(strict_mode_));
-    return pair;
+    FixedArray* other_array = FixedArray::cast(obj);
+    other_array->set(0, shared_);
+    other_array->set(1, source_);
+    other_array->set(2, Smi::FromInt(strict_mode_));
+    other_array->set(3, Smi::FromInt(scope_position_));
+    return other_array;
   }
 
  private:
   String* source_;
   SharedFunctionInfo* shared_;
   StrictModeFlag strict_mode_;
+  int scope_position_;
 };
 
 
@@ -11729,8 +11531,12 @@ Object* CompilationCacheTable::Lookup(String* src) {
 
 Object* CompilationCacheTable::LookupEval(String* src,
                                           Context* context,
-                                          StrictModeFlag strict_mode) {
-  StringSharedKey key(src, context->closure()->shared(), strict_mode);
+                                          StrictModeFlag strict_mode,
+                                          int scope_position) {
+  StringSharedKey key(src,
+                      context->closure()->shared(),
+                      strict_mode,
+                      scope_position);
   int entry = FindEntry(&key);
   if (entry == kNotFound) return GetHeap()->undefined_value();
   return get(EntryToIndex(entry) + 1);
@@ -11765,10 +11571,12 @@ MaybeObject* CompilationCacheTable::Put(String* src, Object* value) {
 
 MaybeObject* CompilationCacheTable::PutEval(String* src,
                                             Context* context,
-                                            SharedFunctionInfo* value) {
+                                            SharedFunctionInfo* value,
+                                            int scope_position) {
   StringSharedKey key(src,
                       context->closure()->shared(),
-                      value->strict_mode_flag());
+                      value->strict_mode_flag(),
+                      scope_position);
   Object* obj;
   { MaybeObject* maybe_obj = EnsureCapacity(1, &key);
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
@@ -11968,30 +11776,6 @@ MaybeObject* Dictionary<Shape, Key>::EnsureCapacity(int n, Key key) {
     }
   }
   return HashTable<Shape, Key>::EnsureCapacity(n, key);
-}
-
-
-void NumberDictionary::RemoveNumberEntries(uint32_t from, uint32_t to) {
-  // Do nothing if the interval [from, to) is empty.
-  if (from >= to) return;
-
-  Heap* heap = GetHeap();
-  int removed_entries = 0;
-  Object* the_hole_value = heap->the_hole_value();
-  int capacity = Capacity();
-  for (int i = 0; i < capacity; i++) {
-    Object* key = KeyAt(i);
-    if (key->IsNumber()) {
-      uint32_t number = static_cast<uint32_t>(key->Number());
-      if (from <= number && number < to) {
-        SetEntry(i, the_hole_value, the_hole_value);
-        removed_entries++;
-      }
-    }
-  }
-
-  // Update the number of elements.
-  ElementsRemoved(removed_entries);
 }
 
 

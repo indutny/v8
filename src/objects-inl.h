@@ -119,6 +119,18 @@ PropertyDetails PropertyDetails::AsDeleted() {
   }
 
 
+bool IsMoreGeneralElementsKindTransition(ElementsKind from_kind,
+                                         ElementsKind to_kind) {
+  if (to_kind == FAST_ELEMENTS) {
+    return from_kind == FAST_SMI_ONLY_ELEMENTS ||
+        from_kind == FAST_DOUBLE_ELEMENTS;
+  } else {
+    return to_kind == FAST_DOUBLE_ELEMENTS &&
+        from_kind == FAST_SMI_ONLY_ELEMENTS;
+  }
+}
+
+
 bool Object::IsFixedArrayBase() {
   return IsFixedArray() || IsFixedDoubleArray();
 }
@@ -1373,6 +1385,16 @@ void JSObject::SetInternalField(int index, Object* value) {
 }
 
 
+void JSObject::SetInternalField(int index, Smi* value) {
+  ASSERT(index < GetInternalFieldCount() && index >= 0);
+  // Internal objects do follow immediately after the header, whereas in-object
+  // properties are at the end of the object. Therefore there is no need
+  // to adjust the index here.
+  int offset = GetHeaderSize() + (kPointerSize * index);
+  WRITE_FIELD(this, offset, value);
+}
+
+
 // Access fast-case object properties at index. The use of these routines
 // is needed to correctly distinguish between properties stored in-object and
 // properties stored in the properties array.
@@ -1860,7 +1882,7 @@ AccessorDescriptor* DescriptorArray::GetCallbacks(int descriptor_number) {
 
 
 bool DescriptorArray::IsProperty(int descriptor_number) {
-  return GetType(descriptor_number) < FIRST_PHANTOM_PROPERTY_TYPE;
+  return IsRealProperty(GetType(descriptor_number));
 }
 
 
@@ -3883,6 +3905,7 @@ JSMessageObject* JSMessageObject::cast(Object* obj) {
 
 INT_ACCESSORS(Code, instruction_size, kInstructionSizeOffset)
 ACCESSORS(Code, relocation_info, ByteArray, kRelocationInfoOffset)
+ACCESSORS(Code, handler_table, FixedArray, kHandlerTableOffset)
 ACCESSORS(Code, deoptimization_data, FixedArray, kDeoptimizationDataOffset)
 ACCESSORS(Code, next_code_flushing_candidate,
           Object, kNextCodeFlushingCandidateOffset)

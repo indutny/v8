@@ -56,6 +56,7 @@ CompilationInfo::CompilationInfo(Handle<Script> script)
       flags_(0),
       function_(NULL),
       scope_(NULL),
+      global_scope_(NULL),
       script_(script),
       extension_(NULL),
       pre_parse_data_(NULL),
@@ -69,6 +70,7 @@ CompilationInfo::CompilationInfo(Handle<SharedFunctionInfo> shared_info)
       flags_(IsLazy::encode(true)),
       function_(NULL),
       scope_(NULL),
+      global_scope_(NULL),
       shared_info_(shared_info),
       script_(Handle<Script>(Script::cast(shared_info->script()))),
       extension_(NULL),
@@ -83,6 +85,7 @@ CompilationInfo::CompilationInfo(Handle<JSFunction> closure)
       flags_(IsLazy::encode(true)),
       function_(NULL),
       scope_(NULL),
+      global_scope_(NULL),
       closure_(closure),
       shared_info_(Handle<SharedFunctionInfo>(closure->shared())),
       script_(Handle<Script>(Script::cast(shared_info_->script()))),
@@ -533,7 +536,8 @@ Handle<SharedFunctionInfo> Compiler::Compile(Handle<String> source,
 Handle<SharedFunctionInfo> Compiler::CompileEval(Handle<String> source,
                                                  Handle<Context> context,
                                                  bool is_global,
-                                                 StrictModeFlag strict_mode) {
+                                                 StrictModeFlag strict_mode,
+                                                 int scope_position) {
   Isolate* isolate = source->GetIsolate();
   int source_length = source->length();
   isolate->counters()->total_eval_size()->Increment(source_length);
@@ -549,7 +553,8 @@ Handle<SharedFunctionInfo> Compiler::CompileEval(Handle<String> source,
   result = compilation_cache->LookupEval(source,
                                          context,
                                          is_global,
-                                         strict_mode);
+                                         strict_mode,
+                                         scope_position);
 
   if (result.is_null()) {
     // Create a script object describing the script to be compiled.
@@ -561,13 +566,13 @@ Handle<SharedFunctionInfo> Compiler::CompileEval(Handle<String> source,
     info.SetCallingContext(context);
     result = MakeFunctionInfo(&info);
     if (!result.is_null()) {
-      CompilationCache* compilation_cache = isolate->compilation_cache();
       // If caller is strict mode, the result must be strict as well,
       // but not the other way around. Consider:
       // eval("'use strict'; ...");
       // TODO(keuchel): adapt this for extended mode.
       ASSERT(strict_mode == kNonStrictMode || result->strict_mode());
-      compilation_cache->PutEval(source, context, is_global, result);
+      compilation_cache->PutEval(
+          source, context, is_global, result, scope_position);
     }
   }
 
@@ -734,8 +739,8 @@ void Compiler::SetFunctionInfo(Handle<SharedFunctionInfo> function_info,
                                FunctionLiteral* lit,
                                bool is_toplevel,
                                Handle<Script> script) {
-  function_info->set_length(lit->num_parameters());
-  function_info->set_formal_parameter_count(lit->num_parameters());
+  function_info->set_length(lit->parameter_count());
+  function_info->set_formal_parameter_count(lit->parameter_count());
   function_info->set_script(*script);
   function_info->set_function_token_position(lit->function_token_position());
   function_info->set_start_position(lit->start_position());

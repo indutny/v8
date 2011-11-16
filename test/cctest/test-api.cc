@@ -7453,6 +7453,60 @@ THREADED_TEST(SetPrototype) {
 }
 
 
+// Getting property names of an object with a prototype chain that
+// triggers dictionary elements in GetLocalPropertyNames() shouldn't
+// crash the runtime.
+THREADED_TEST(Regress91517) {
+  i::FLAG_allow_natives_syntax = true;
+  v8::HandleScope handle_scope;
+  LocalContext context;
+
+  Local<v8::FunctionTemplate> t1 = v8::FunctionTemplate::New();
+  t1->SetHiddenPrototype(true);
+  t1->InstanceTemplate()->Set(v8_str("foo"), v8_num(1));
+  Local<v8::FunctionTemplate> t2 = v8::FunctionTemplate::New();
+  t2->SetHiddenPrototype(true);
+  t2->InstanceTemplate()->Set(v8_str("fuz1"), v8_num(2));
+  t2->InstanceTemplate()->Set(v8_str("objects"), v8::Object::New());
+  t2->InstanceTemplate()->Set(v8_str("fuz2"), v8_num(2));
+  Local<v8::FunctionTemplate> t3 = v8::FunctionTemplate::New();
+  t3->SetHiddenPrototype(true);
+  t3->InstanceTemplate()->Set(v8_str("boo"), v8_num(3));
+  Local<v8::FunctionTemplate> t4 = v8::FunctionTemplate::New();
+  t4->InstanceTemplate()->Set(v8_str("baz"), v8_num(4));
+
+  // Force dictionary-based properties.
+  i::ScopedVector<char> name_buf(1024);
+  for (int i = 1; i <= 1000; i++) {
+    i::OS::SNPrintF(name_buf, "sdf%d", i);
+    t2->InstanceTemplate()->Set(v8_str(name_buf.start()), v8_num(2));
+  }
+
+  Local<v8::Object> o1 = t1->GetFunction()->NewInstance();
+  Local<v8::Object> o2 = t2->GetFunction()->NewInstance();
+  Local<v8::Object> o3 = t3->GetFunction()->NewInstance();
+  Local<v8::Object> o4 = t4->GetFunction()->NewInstance();
+
+  // Create prototype chain of hidden prototypes.
+  CHECK(o4->SetPrototype(o3));
+  CHECK(o3->SetPrototype(o2));
+  CHECK(o2->SetPrototype(o1));
+
+  // Call the runtime version of GetLocalPropertyNames() on the natively
+  // created object through JavaScript.
+  context->Global()->Set(v8_str("obj"), o4);
+  CompileRun("var names = %GetLocalPropertyNames(obj);");
+
+  ExpectInt32("names.length", 1006);
+  ExpectTrue("names.indexOf(\"baz\") >= 0");
+  ExpectTrue("names.indexOf(\"boo\") >= 0");
+  ExpectTrue("names.indexOf(\"foo\") >= 0");
+  ExpectTrue("names.indexOf(\"fuz1\") >= 0");
+  ExpectTrue("names.indexOf(\"fuz2\") >= 0");
+  ExpectFalse("names[1005] == undefined");
+}
+
+
 THREADED_TEST(FunctionReadOnlyPrototype) {
   v8::HandleScope handle_scope;
   LocalContext context;
@@ -13564,7 +13618,13 @@ THREADED_TEST(QuietSignalingNaNs) {
     } else {
       uint64_t stored_bits = DoubleToBits(stored_number);
       // Check if quiet nan (bits 51..62 all set).
+#if defined(V8_TARGET_ARCH_MIPS) && !defined(USE_SIMULATOR)
+      // Most significant fraction bit for quiet nan is set to 0
+      // on MIPS architecture. Allowed by IEEE-754.
+      CHECK_EQ(0xffe, static_cast<int>((stored_bits >> 51) & 0xfff));
+#else
       CHECK_EQ(0xfff, static_cast<int>((stored_bits >> 51) & 0xfff));
+#endif
     }
 
     // Check that Date::New preserves non-NaNs in the date range and
@@ -13577,7 +13637,13 @@ THREADED_TEST(QuietSignalingNaNs) {
     } else {
       uint64_t stored_bits = DoubleToBits(stored_date);
       // Check if quiet nan (bits 51..62 all set).
+#if defined(V8_TARGET_ARCH_MIPS) && !defined(USE_SIMULATOR)
+      // Most significant fraction bit for quiet nan is set to 0
+      // on MIPS architecture. Allowed by IEEE-754.
+      CHECK_EQ(0xffe, static_cast<int>((stored_bits >> 51) & 0xfff));
+#else
       CHECK_EQ(0xfff, static_cast<int>((stored_bits >> 51) & 0xfff));
+#endif
     }
   }
 }
@@ -13745,6 +13811,41 @@ THREADED_TEST(ScriptLineNumber) {
       env->Global()->Get(v8::String::New("g")));
   CHECK_EQ(0, f->GetScriptLineNumber());
   CHECK_EQ(2, g->GetScriptLineNumber());
+}
+
+
+THREADED_TEST(ScriptColumnNumber) {
+  v8::HandleScope scope;
+  LocalContext env;
+  v8::ScriptOrigin origin = v8::ScriptOrigin(v8::String::New("test"),
+      v8::Integer::New(3), v8::Integer::New(2));
+  v8::Handle<v8::String> script = v8::String::New(
+      "function foo() {}\n\n     function bar() {}");
+  v8::Script::Compile(script, &origin)->Run();
+  v8::Local<v8::Function> foo = v8::Local<v8::Function>::Cast(
+      env->Global()->Get(v8::String::New("foo")));
+  v8::Local<v8::Function> bar = v8::Local<v8::Function>::Cast(
+      env->Global()->Get(v8::String::New("bar")));
+  CHECK_EQ(14, foo->GetScriptColumnNumber());
+  CHECK_EQ(17, bar->GetScriptColumnNumber());
+}
+
+
+THREADED_TEST(FunctionGetScriptId) {
+  v8::HandleScope scope;
+  LocalContext env;
+  v8::ScriptOrigin origin = v8::ScriptOrigin(v8::String::New("test"),
+      v8::Integer::New(3), v8::Integer::New(2));
+  v8::Handle<v8::String> scriptSource = v8::String::New(
+      "function foo() {}\n\n     function bar() {}");
+  v8::Local<v8::Script> script(v8::Script::Compile(scriptSource, &origin));
+  script->Run();
+  v8::Local<v8::Function> foo = v8::Local<v8::Function>::Cast(
+      env->Global()->Get(v8::String::New("foo")));
+  v8::Local<v8::Function> bar = v8::Local<v8::Function>::Cast(
+      env->Global()->Get(v8::String::New("bar")));
+  CHECK_EQ(script->Id(), foo->GetScriptId());
+  CHECK_EQ(script->Id(), bar->GetScriptId());
 }
 
 

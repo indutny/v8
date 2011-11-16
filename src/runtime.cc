@@ -883,49 +883,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_IsInPrototypeChain) {
 }
 
 
-// Inserts an object as the hidden prototype of another object.
-RUNTIME_FUNCTION(MaybeObject*, Runtime_SetHiddenPrototype) {
-  NoHandleAllocation ha;
-  ASSERT(args.length() == 2);
-  CONVERT_CHECKED(JSObject, jsobject, args[0]);
-  CONVERT_CHECKED(JSObject, proto, args[1]);
-
-  // Sanity checks.  The old prototype (that we are replacing) could
-  // theoretically be null, but if it is not null then check that we
-  // didn't already install a hidden prototype here.
-  RUNTIME_ASSERT(!jsobject->GetPrototype()->IsHeapObject() ||
-    !HeapObject::cast(jsobject->GetPrototype())->map()->is_hidden_prototype());
-  RUNTIME_ASSERT(!proto->map()->is_hidden_prototype());
-
-  // Allocate up front before we start altering state in case we get a GC.
-  Object* map_or_failure;
-  { MaybeObject* maybe_map_or_failure = proto->map()->CopyDropTransitions();
-    if (!maybe_map_or_failure->ToObject(&map_or_failure)) {
-      return maybe_map_or_failure;
-    }
-  }
-  Map* new_proto_map = Map::cast(map_or_failure);
-
-  { MaybeObject* maybe_map_or_failure = jsobject->map()->CopyDropTransitions();
-    if (!maybe_map_or_failure->ToObject(&map_or_failure)) {
-      return maybe_map_or_failure;
-    }
-  }
-  Map* new_map = Map::cast(map_or_failure);
-
-  // Set proto's prototype to be the old prototype of the object.
-  new_proto_map->set_prototype(jsobject->GetPrototype());
-  proto->set_map(new_proto_map);
-  new_proto_map->set_is_hidden_prototype();
-
-  // Set the object's prototype to proto.
-  new_map->set_prototype(proto);
-  jsobject->set_map(new_map);
-
-  return isolate->heap()->undefined_value();
-}
-
-
 RUNTIME_FUNCTION(MaybeObject*, Runtime_IsConstructCall) {
   NoHandleAllocation ha;
   ASSERT(args.length() == 0);
@@ -6969,8 +6926,13 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SparseJoinWithSeparator) {
 
   // Find total length of join result.
   int string_length = 0;
-  bool is_ascii = true;
-  int max_string_length = SeqAsciiString::kMaxLength;
+  bool is_ascii = separator->IsAsciiRepresentation();
+  int max_string_length;
+  if (is_ascii) {
+    max_string_length = SeqAsciiString::kMaxLength;
+  } else {
+    max_string_length = SeqTwoByteString::kMaxLength;
+  }
   bool overflow = false;
   CONVERT_NUMBER_CHECKED(int, elements_length,
                          Int32, elements_array->length());
@@ -8181,7 +8143,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionBindArguments) {
 RUNTIME_FUNCTION(MaybeObject*, Runtime_BoundFunctionGetBindings) {
   HandleScope handles(isolate);
   ASSERT(args.length() == 1);
-  CONVERT_ARG_CHECKED(JSObject, callable, 0);
+  CONVERT_ARG_CHECKED(JSReceiver, callable, 0);
   if (callable->IsJSFunction()) {
     Handle<JSFunction> function = Handle<JSFunction>::cast(callable);
     if (function->shared()->bound()) {
@@ -8696,6 +8658,42 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CompileForOnStackReplacement) {
 RUNTIME_FUNCTION(MaybeObject*, Runtime_CheckIsBootstrapping) {
   RUNTIME_ASSERT(isolate->bootstrapper()->IsActive());
   return isolate->heap()->undefined_value();
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_Call) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() >= 2);
+  CONVERT_CHECKED(JSReceiver, fun, args[args.length() - 1]);
+  Object* receiver = args[0];
+  int argc = args.length() - 2;
+
+  // If there are too many arguments, allocate argv via malloc.
+  const int argv_small_size = 10;
+  Handle<Object> argv_small_buffer[argv_small_size];
+  SmartArrayPointer<Handle<Object> > argv_large_buffer;
+  Handle<Object>* argv = argv_small_buffer;
+  if (argc > argv_small_size) {
+    argv = new Handle<Object>[argc];
+    if (argv == NULL) return isolate->StackOverflow();
+    argv_large_buffer = SmartArrayPointer<Handle<Object> >(argv);
+  }
+
+  for (int i = 0; i < argc; ++i) {
+     MaybeObject* maybe = args[1 + i];
+     Object* object;
+     if (!maybe->To<Object>(&object)) return maybe;
+     argv[i] = Handle<Object>(object);
+  }
+
+  bool threw;
+  Handle<JSReceiver> hfun(fun);
+  Handle<Object> hreceiver(receiver);
+  Handle<Object> result =
+      Execution::Call(hfun, hreceiver, argc, argv, &threw, true);
+
+  if (threw) return Failure::Exception();
+  return *result;
 }
 
 
@@ -9436,10 +9434,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CompileString) {
   }
 
   // Compile source string in the global context.
-  Handle<SharedFunctionInfo> shared = Compiler::CompileEval(source,
-                                                            context,
-                                                            true,
-                                                            kNonStrictMode);
+  Handle<SharedFunctionInfo> shared = Compiler::CompileEval(
+      source, context, true, kNonStrictMode, RelocInfo::kNoPosition);
   if (shared.is_null()) return Failure::Exception();
   Handle<JSFunction> fun =
       isolate->factory()->NewFunctionFromSharedFunctionInfo(shared,
@@ -9452,7 +9448,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CompileString) {
 static ObjectPair CompileGlobalEval(Isolate* isolate,
                                     Handle<String> source,
                                     Handle<Object> receiver,
-                                    StrictModeFlag strict_mode) {
+                                    StrictModeFlag strict_mode,
+                                    int scope_position) {
   Handle<Context> context = Handle<Context>(isolate->context());
   Handle<Context> global_context = Handle<Context>(context->global_context());
 
@@ -9470,7 +9467,8 @@ static ObjectPair CompileGlobalEval(Isolate* isolate,
       source,
       Handle<Context>(isolate->context()),
       context->IsGlobalContext(),
-      strict_mode);
+      strict_mode,
+      scope_position);
   if (shared.is_null()) return MakePair(Failure::Exception(), NULL);
   Handle<JSFunction> compiled =
       isolate->factory()->NewFunctionFromSharedFunctionInfo(
@@ -9480,7 +9478,7 @@ static ObjectPair CompileGlobalEval(Isolate* isolate,
 
 
 RUNTIME_FUNCTION(ObjectPair, Runtime_ResolvePossiblyDirectEval) {
-  ASSERT(args.length() == 4);
+  ASSERT(args.length() == 5);
 
   HandleScope scope(isolate);
   Handle<Object> callee = args.at<Object>(0);
@@ -9496,10 +9494,12 @@ RUNTIME_FUNCTION(ObjectPair, Runtime_ResolvePossiblyDirectEval) {
   }
 
   CONVERT_STRICT_MODE_ARG(strict_mode, 3);
+  ASSERT(args[4]->IsSmi());
   return CompileGlobalEval(isolate,
                            args.at<String>(1),
                            args.at<Object>(2),
-                           strict_mode);
+                           strict_mode,
+                           args.smi_at(4));
 }
 
 
@@ -12113,7 +12113,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluate) {
       Compiler::CompileEval(function_source,
                             context,
                             context->IsGlobalContext(),
-                            kNonStrictMode);
+                            kNonStrictMode,
+                            RelocInfo::kNoPosition);
   if (shared.is_null()) return Failure::Exception();
   Handle<JSFunction> compiled_function =
       isolate->factory()->NewFunctionFromSharedFunctionInfo(shared, context);
@@ -12190,15 +12191,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluateGlobal) {
   bool is_global = true;
 
   if (additional_context->IsJSObject()) {
-    // Create a function context first, than put 'with' context on top of it.
-    Handle<JSFunction> go_between = isolate->factory()->NewFunction(
-        isolate->factory()->empty_string(),
-        isolate->factory()->undefined_value());
-    go_between->set_context(*context);
-    context =
-        isolate->factory()->NewFunctionContext(
-            Context::MIN_CONTEXT_SLOTS, go_between);
-    context->set_extension(JSObject::cast(*additional_context));
+    // Create a new with context with the additional context information between
+    // the context of the debugged function and the eval code to be executed.
+    context = isolate->factory()->NewWithContext(
+        Handle<JSFunction>(context->closure()),
+        context,
+        Handle<JSObject>::cast(additional_context));
     is_global = false;
   }
 
@@ -12206,7 +12204,11 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluateGlobal) {
   // Currently, the eval code will be executed in non-strict mode,
   // even in the strict code context.
   Handle<SharedFunctionInfo> shared =
-      Compiler::CompileEval(source, context, is_global, kNonStrictMode);
+      Compiler::CompileEval(source,
+                            context,
+                            is_global,
+                            kNonStrictMode,
+                            RelocInfo::kNoPosition);
   if (shared.is_null()) return Failure::Exception();
   Handle<JSFunction> compiled_function =
       Handle<JSFunction>(

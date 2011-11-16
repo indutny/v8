@@ -4337,7 +4337,7 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 }
 
 
-void CallFunctionStub::FinishCode(Code* code) {
+void CallFunctionStub::FinishCode(Handle<Code> code) {
   code->set_has_function_cache(RecordCallTarget());
 }
 
@@ -4361,6 +4361,7 @@ Object* CallFunctionStub::GetCachedValue(Address address) {
 
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
+  // edi : the function to call
   Isolate* isolate = masm->isolate();
   Label slow, non_function;
 
@@ -4381,10 +4382,6 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     __ mov(Operand(esp, (argc_ + 1) * kPointerSize), ebx);
     __ bind(&receiver_ok);
   }
-
-  // Get the function to call from the stack.
-  // +2 ~ receiver, return address
-  __ mov(edi, Operand(esp, (argc_ + 2) * kPointerSize));
 
   // Check that the function really is a JavaScript function.
   __ JumpIfSmi(edi, &non_function);
@@ -4718,7 +4715,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 
 
 void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
-  Label invoke, exit;
+  Label invoke, handler_entry, exit;
   Label not_outermost_js, not_outermost_js_2;
 
   // Setup frame.
@@ -4751,20 +4748,23 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ push(Immediate(Smi::FromInt(StackFrame::INNER_JSENTRY_FRAME)));
   __ bind(&cont);
 
-  // Call a faked try-block that does the invoke.
-  __ call(&invoke);
-
-  // Caught exception: Store result (exception) in the pending
-  // exception field in the JSEnv and return a failure sentinel.
+  // Jump to a faked try block that does the invoke, with a faked catch
+  // block that sets the pending exception.
+  __ jmp(&invoke);
+  __ bind(&handler_entry);
+  handler_offset_ = handler_entry.pos();
+  // Caught exception: Store result (exception) in the pending exception
+  // field in the JSEnv and return a failure sentinel.
   ExternalReference pending_exception(Isolate::kPendingExceptionAddress,
                                       masm->isolate());
   __ mov(Operand::StaticVariable(pending_exception), eax);
   __ mov(eax, reinterpret_cast<int32_t>(Failure::Exception()));
   __ jmp(&exit);
 
-  // Invoke: Link this frame into the handler chain.
+  // Invoke: Link this frame into the handler chain.  There's only one
+  // handler block in this code object, so its index is 0.
   __ bind(&invoke);
-  __ PushTryHandler(IN_JS_ENTRY, JS_ENTRY_HANDLER);
+  __ PushTryHandler(IN_JS_ENTRY, JS_ENTRY_HANDLER, 0);
 
   // Clear any pending exceptions.
   __ mov(edx, Immediate(masm->isolate()->factory()->the_hole_value()));
@@ -4773,14 +4773,13 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Fake a receiver (NULL).
   __ push(Immediate(0));  // receiver
 
-  // Invoke the function by calling through JS entry trampoline
-  // builtin and pop the faked function when we return. Notice that we
-  // cannot store a reference to the trampoline code directly in this
-  // stub, because the builtin stubs may not have been generated yet.
+  // Invoke the function by calling through JS entry trampoline builtin and
+  // pop the faked function when we return. Notice that we cannot store a
+  // reference to the trampoline code directly in this stub, because the
+  // builtin stubs may not have been generated yet.
   if (is_construct) {
-    ExternalReference construct_entry(
-        Builtins::kJSConstructEntryTrampoline,
-        masm->isolate());
+    ExternalReference construct_entry(Builtins::kJSConstructEntryTrampoline,
+                                      masm->isolate());
     __ mov(edx, Immediate(construct_entry));
   } else {
     ExternalReference entry(Builtins::kJSEntryTrampoline,
@@ -5109,13 +5108,10 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   // If the index is non-smi trigger the non-smi case.
   STATIC_ASSERT(kSmiTag == 0);
   __ JumpIfNotSmi(index_, &index_not_smi_);
-
-  // Put smi-tagged index into scratch register.
-  __ mov(scratch_, index_);
   __ bind(&got_smi_index_);
 
   // Check for index out of range.
-  __ cmp(scratch_, FieldOperand(object_, String::kLengthOffset));
+  __ cmp(index_, FieldOperand(object_, String::kLengthOffset));
   __ j(above_equal, index_out_of_range_);
 
   // We need special handling for non-flat strings.
@@ -5140,25 +5136,25 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   __ cmp(FieldOperand(object_, ConsString::kSecondOffset),
          Immediate(masm->isolate()->factory()->empty_string()));
   __ j(not_equal, &call_runtime_);
-  // Get the first of the two strings and load its instance type.
-  __ mov(result_, FieldOperand(object_, ConsString::kFirstOffset));
+  // Get the first of the two parts.
+  __ mov(object_, FieldOperand(object_, ConsString::kFirstOffset));
   __ jmp(&assure_seq_string, Label::kNear);
 
   // SlicedString, unpack and add offset.
   __ bind(&sliced_string);
-  __ add(scratch_, FieldOperand(object_, SlicedString::kOffsetOffset));
-  __ mov(result_, FieldOperand(object_, SlicedString::kParentOffset));
+  __ add(index_, FieldOperand(object_, SlicedString::kOffsetOffset));
+  __ mov(object_, FieldOperand(object_, SlicedString::kParentOffset));
 
   // Assure that we are dealing with a sequential string. Go to runtime if not.
+  // Note that if the original string is a cons or slice with an external
+  // string as underlying string, we pass that unpacked underlying string with
+  // the adjusted index to the runtime function.
   __ bind(&assure_seq_string);
-  __ mov(result_, FieldOperand(result_, HeapObject::kMapOffset));
+  __ mov(result_, FieldOperand(object_, HeapObject::kMapOffset));
   __ movzx_b(result_, FieldOperand(result_, Map::kInstanceTypeOffset));
   STATIC_ASSERT(kSeqStringTag == 0);
   __ test(result_, Immediate(kStringRepresentationMask));
   __ j(not_zero, &call_runtime_);
-  // Actually fetch the parent string if it is confirmed to be sequential.
-  STATIC_ASSERT(SlicedString::kParentOffset == ConsString::kFirstOffset);
-  __ mov(object_, FieldOperand(object_, SlicedString::kParentOffset));
 
   // Check for 1-byte or 2-byte string.
   __ bind(&flat_string);
@@ -5171,16 +5167,16 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   // Load the 2-byte character code into the result register.
   STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
   __ movzx_w(result_, FieldOperand(object_,
-                                   scratch_, times_1,  // Scratch is smi-tagged.
+                                   index_, times_1,  // Scratch is smi-tagged.
                                    SeqTwoByteString::kHeaderSize));
   __ jmp(&got_char_code, Label::kNear);
 
   // ASCII string.
   // Load the byte into the result register.
   __ bind(&ascii_string);
-  __ SmiUntag(scratch_);
+  __ SmiUntag(index_);
   __ movzx_b(result_, FieldOperand(object_,
-                                   scratch_, times_1,
+                                   index_, times_1,
                                    SeqAsciiString::kHeaderSize));
   __ bind(&got_char_code);
   __ SmiTag(result_);
@@ -5202,7 +5198,6 @@ void StringCharCodeAtGenerator::GenerateSlow(
               DONT_DO_SMI_CHECK);
   call_helper.BeforeCall(masm);
   __ push(object_);
-  __ push(index_);
   __ push(index_);  // Consumed by runtime conversion function.
   if (index_flags_ == STRING_INDEX_IS_NUMBER) {
     __ CallRuntime(Runtime::kNumberToIntegerMapMinusZero, 1);
@@ -5211,12 +5206,11 @@ void StringCharCodeAtGenerator::GenerateSlow(
     // NumberToSmi discards numbers that are not exact integers.
     __ CallRuntime(Runtime::kNumberToSmi, 1);
   }
-  if (!scratch_.is(eax)) {
+  if (!index_.is(eax)) {
     // Save the conversion result before the pop instructions below
     // have a chance to overwrite it.
-    __ mov(scratch_, eax);
+    __ mov(index_, eax);
   }
-  __ pop(index_);
   __ pop(object_);
   // Reload the instance type.
   __ mov(result_, FieldOperand(object_, HeapObject::kMapOffset));
@@ -5224,7 +5218,7 @@ void StringCharCodeAtGenerator::GenerateSlow(
   call_helper.AfterCall(masm);
   // If index is still not a smi, it must be out of range.
   STATIC_ASSERT(kSmiTag == 0);
-  __ JumpIfNotSmi(scratch_, index_out_of_range_);
+  __ JumpIfNotSmi(index_, index_out_of_range_);
   // Otherwise, return to the fast path.
   __ jmp(&got_smi_index_);
 
@@ -5780,6 +5774,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   static const int kProbes = 4;
   Label found_in_symbol_table;
   Label next_probe[kProbes], next_probe_pop_mask[kProbes];
+  Register candidate = scratch;  // Scratch register contains candidate.
   for (int i = 0; i < kProbes; i++) {
     // Calculate entry in symbol table.
     __ mov(scratch, hash);
@@ -5789,7 +5784,6 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     __ and_(scratch, mask);
 
     // Load the entry from the symbol table.
-    Register candidate = scratch;  // Scratch register contains candidate.
     STATIC_ASSERT(SymbolTable::kEntrySize == 1);
     __ mov(candidate,
            FieldOperand(symbol_table,
@@ -5801,7 +5795,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     Factory* factory = masm->isolate()->factory();
     __ cmp(candidate, factory->undefined_value());
     __ j(equal, not_found);
-    __ cmp(candidate, factory->null_value());
+    __ cmp(candidate, factory->the_hole_value());
     __ j(equal, &next_probe[i]);
 
     // If length is not 2 the string is not a candidate.
@@ -5834,7 +5828,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   __ jmp(not_found);
 
   // Scratch register contains result when we fall through to here.
-  Register result = scratch;
+  Register result = candidate;
   __ bind(&found_in_symbol_table);
   __ pop(mask);  // Pop saved mask from the stack.
   if (!result.is(eax)) {
@@ -5853,7 +5847,7 @@ void StringHelper::GenerateHashInit(MacroAssembler* masm,
   __ add(hash, character);
   // hash ^= hash >> 6;
   __ mov(scratch, hash);
-  __ sar(scratch, 6);
+  __ shr(scratch, 6);
   __ xor_(hash, scratch);
 }
 
@@ -5870,7 +5864,7 @@ void StringHelper::GenerateHashAddCharacter(MacroAssembler* masm,
   __ add(hash, scratch);
   // hash ^= hash >> 6;
   __ mov(scratch, hash);
-  __ sar(scratch, 6);
+  __ shr(scratch, 6);
   __ xor_(hash, scratch);
 }
 
@@ -5884,12 +5878,15 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
   __ add(hash, scratch);
   // hash ^= hash >> 11;
   __ mov(scratch, hash);
-  __ sar(scratch, 11);
+  __ shr(scratch, 11);
   __ xor_(hash, scratch);
   // hash += hash << 15;
   __ mov(scratch, hash);
   __ shl(scratch, 15);
   __ add(hash, scratch);
+
+  uint32_t kHashShiftCutOffMask = (1 << (32 - String::kHashShift)) - 1;
+  __ and_(hash, kHashShiftCutOffMask);
 
   // if (hash == 0) hash = 27;
   Label hash_not_zero;
@@ -7049,16 +7046,14 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   Label slow_elements_from_double;
   Label fast_elements;
 
-  if (!FLAG_trace_elements_transitions) {
-    __ CheckFastElements(edi, &double_elements);
+  __ CheckFastElements(edi, &double_elements);
 
-    // FAST_SMI_ONLY_ELEMENTS or FAST_ELEMENTS
-    __ JumpIfSmi(eax, &smi_element);
-    __ CheckFastSmiOnlyElements(edi, &fast_elements, Label::kNear);
+  // FAST_SMI_ONLY_ELEMENTS or FAST_ELEMENTS
+  __ JumpIfSmi(eax, &smi_element);
+  __ CheckFastSmiOnlyElements(edi, &fast_elements, Label::kNear);
 
-    // Store into the array literal requires a elements transition. Call into
-    // the runtime.
-  }
+  // Store into the array literal requires a elements transition. Call into
+  // the runtime.
 
   __ bind(&slow_elements);
   __ pop(edi);  // Pop return address and remember to put back later for tail
@@ -7073,49 +7068,45 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
                  // place.
   __ TailCallRuntime(Runtime::kStoreArrayLiteralElement, 5, 1);
 
-  if (!FLAG_trace_elements_transitions) {
-    // Array literal has ElementsKind of FAST_DOUBLE_ELEMENTS.
-    __ bind(&double_elements);
+  __ bind(&slow_elements_from_double);
+  __ pop(edx);
+  __ jmp(&slow_elements);
 
-    __ push(edx);
-    __ mov(edx, FieldOperand(ebx, JSObject::kElementsOffset));
-    __ StoreNumberToDoubleElements(eax,
-                                   edx,
-                                   ecx,
-                                   edi,
-                                   xmm0,
-                                   &slow_elements_from_double,
-                                   false);
-    __ pop(edx);
-    __ jmp(&element_done);
+  // Array literal has ElementsKind of FAST_ELEMENTS and value is an object.
+  __ bind(&fast_elements);
+  __ mov(ebx, FieldOperand(ebx, JSObject::kElementsOffset));
+  __ lea(ecx, FieldOperand(ebx, ecx, times_half_pointer_size,
+                           FixedArrayBase::kHeaderSize));
+  __ mov(Operand(ecx, 0), eax);
+  // Update the write barrier for the array store.
+  __ RecordWrite(ebx, ecx, eax,
+                 kDontSaveFPRegs,
+                 EMIT_REMEMBERED_SET,
+                 OMIT_SMI_CHECK);
+  __ ret(0);
 
-    __ bind(&slow_elements_from_double);
-    __ pop(edx);
-    __ jmp(&slow_elements);
+  // Array literal has ElementsKind of FAST_SMI_ONLY_ELEMENTS or
+  // FAST_ELEMENTS, and value is Smi.
+  __ bind(&smi_element);
+  __ mov(ebx, FieldOperand(ebx, JSObject::kElementsOffset));
+  __ mov(FieldOperand(ebx, ecx, times_half_pointer_size,
+                      FixedArrayBase::kHeaderSize), eax);
+  __ ret(0);
 
-    // Array literal has ElementsKind of FAST_ELEMENTS and value is an object.
-    __ bind(&fast_elements);
-    __ mov(ebx, FieldOperand(ebx, JSObject::kElementsOffset));
-    __ lea(ecx, FieldOperand(ebx, ecx, times_half_pointer_size,
-                             FixedArrayBase::kHeaderSize));
-    __ mov(Operand(ecx, 0), eax);
-    // Update the write barrier for the array store.
-    __ RecordWrite(ebx, ecx, eax,
-                   kDontSaveFPRegs,
-                   EMIT_REMEMBERED_SET,
-                   OMIT_SMI_CHECK);
-    __ jmp(&element_done);
+  // Array literal has ElementsKind of FAST_DOUBLE_ELEMENTS.
+  __ bind(&double_elements);
 
-    // Array literal has ElementsKind of FAST_SMI_ONLY_ELEMENTS or
-    // FAST_ELEMENTS, and value is Smi.
-    __ bind(&smi_element);
-    __ mov(ebx, FieldOperand(ebx, JSObject::kElementsOffset));
-    __ mov(FieldOperand(ebx, ecx, times_half_pointer_size,
-                        FixedArrayBase::kHeaderSize), eax);
-    // Fall through
-    __ bind(&element_done);
-    __ ret(0);
-  }
+  __ push(edx);
+  __ mov(edx, FieldOperand(ebx, JSObject::kElementsOffset));
+  __ StoreNumberToDoubleElements(eax,
+                                 edx,
+                                 ecx,
+                                 edi,
+                                 xmm0,
+                                 &slow_elements_from_double,
+                                 false);
+  __ pop(edx);
+  __ ret(0);
 }
 
 #undef __
