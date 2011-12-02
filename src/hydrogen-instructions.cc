@@ -705,6 +705,12 @@ void HIsNilAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
+void HBranchIndirect::PrintDataTo(StringStream* stream) {
+  value()->PrintNameTo(stream);
+  HControlInstruction::PrintDataTo(stream);
+}
+
+
 void HReturn::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
 }

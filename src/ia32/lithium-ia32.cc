@@ -931,12 +931,12 @@ void LChunkBuilder::DoBasicBlock(HBasicBlock* block, HBasicBlock* next_block) {
     HEnvironment* last_environment = pred->last_environment();
     ASSERT(last_environment != NULL);
     // Only copy the environment, if it is later used again.
-    if (pred->end()->SecondSuccessor() == NULL) {
-      ASSERT(pred->end()->FirstSuccessor() == block);
-    } else {
-      if (pred->end()->FirstSuccessor()->block_id() > block->block_id() ||
-          pred->end()->SecondSuccessor()->block_id() > block->block_id()) {
-        last_environment = last_environment->Copy();
+    if (pred->end()->SuccessorCount() > 1) {
+      for (HSuccessorIterator it(pred->end()); !it.Done(); it.Advance()) {
+        if (it.Current()->block_id() > block->block_id()) {
+          last_environment = last_environment->Copy();
+          break;
+        }
       }
     }
     block->UpdateEnvironment(last_environment);
@@ -1037,6 +1037,13 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
 
 LInstruction* LChunkBuilder::DoGoto(HGoto* instr) {
   return new(zone()) LGoto(instr->FirstSuccessor()->block_id());
+}
+
+
+LInstruction* LChunkBuilder::DoBranchIndirect(HBranchIndirect* instr) {
+  LOperand* input = UseTempRegister(instr->value());
+  LOperand* temp = TempRegister();
+  return new LBranchIndirect(input, temp);
 }
 
 

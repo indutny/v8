@@ -63,7 +63,8 @@ class LCodeGen BASE_EMBEDDED {
         osr_pc_offset_(-1),
         last_lazy_deopt_pc_(0),
         resolver_(this),
-        expected_safepoint_kind_(Safepoint::kSimple) {
+        expected_safepoint_kind_(Safepoint::kSimple),
+        computed_branches_(0) {
     PopulateDeoptimizationLiteralsWithInlinedFunctions();
   }
 
@@ -165,6 +166,7 @@ class LCodeGen BASE_EMBEDDED {
   bool GeneratePrologue();
   bool GenerateBody();
   bool GenerateDeferredCode();
+  bool GenerateJumpTargetTables();
   // Pad the reloc info to ensure that we have enough space to patch during
   // deoptimization.
   bool GenerateRelocPadding();
@@ -351,6 +353,8 @@ class LCodeGen BASE_EMBEDDED {
    private:
     LCodeGen* codegen_;
   };
+
+  ZoneList<LBranchIndirect*> computed_branches_;
 
   friend class LDeferredCode;
   friend class LEnvironment;

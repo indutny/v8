@@ -53,6 +53,7 @@ class LCodeGen;
   V(BitNotI)                                    \
   V(BoundsCheck)                                \
   V(Branch)                                     \
+  V(BranchIndirect)                             \
   V(CallConstantFunction)                       \
   V(CallFunction)                               \
   V(CallGlobal)                                 \
@@ -906,6 +907,23 @@ class LBranch: public LControlInstruction<1, 1> {
   DECLARE_HYDROGEN_ACCESSOR(Branch)
 
   virtual void PrintDataTo(StringStream* stream);
+};
+
+
+class LBranchIndirect: public LControlInstruction<1, 1> {
+ public:
+  explicit LBranchIndirect(LOperand* value, LOperand* temp) {
+    inputs_[0] = value;
+    temps_[0] = temp;
+  }
+
+  Label* jump_targets() { return &jump_targets_; }
+
+  DECLARE_CONCRETE_INSTRUCTION(Branch, "branch-indirect")
+  DECLARE_HYDROGEN_ACCESSOR(BranchIndirect)
+
+ private:
+  Label jump_targets_;
 };
 
 

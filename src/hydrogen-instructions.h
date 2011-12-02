@@ -72,6 +72,7 @@ class LChunkBuilder;
   V(BlockEntry)                                \
   V(BoundsCheck)                               \
   V(Branch)                                    \
+  V(BranchIndirect)                            \
   V(CallConstantFunction)                      \
   V(CallFunction)                              \
   V(CallGlobal)                                \
@@ -795,11 +796,13 @@ class HInstruction: public HValue {
 template<int V>
 class HTemplateInstruction : public HInstruction {
  public:
-  int OperandCount() { return V; }
-  HValue* OperandAt(int i) { return inputs_[i]; }
+  virtual int OperandCount() { return V; }
+  virtual HValue* OperandAt(int i) { return inputs_[i]; }
 
  protected:
-  void InternalSetOperandAt(int i, HValue* value) { inputs_[i] = value; }
+  virtual void InternalSetOperandAt(int i, HValue* value) {
+    inputs_[i] = value;
+  }
 
  private:
   EmbeddedContainer<HValue*, V> inputs_;
@@ -843,16 +846,20 @@ class HSuccessorIterator BASE_EMBEDDED {
 template<int S, int V>
 class HTemplateControlInstruction: public HControlInstruction {
  public:
-  int SuccessorCount() { return S; }
-  HBasicBlock* SuccessorAt(int i) { return successors_[i]; }
-  void SetSuccessorAt(int i, HBasicBlock* block) { successors_[i] = block; }
+  virtual int SuccessorCount() { return S; }
+  virtual HBasicBlock* SuccessorAt(int i) { return successors_[i]; }
+  virtual void SetSuccessorAt(int i, HBasicBlock* block) {
+    successors_[i] = block;
+  }
 
-  int OperandCount() { return V; }
-  HValue* OperandAt(int i) { return inputs_[i]; }
+  virtual int OperandCount() { return V; }
+  virtual HValue* OperandAt(int i) { return inputs_[i]; }
 
 
  protected:
-  void InternalSetOperandAt(int i, HValue* value) { inputs_[i] = value; }
+  virtual void InternalSetOperandAt(int i, HValue* value) {
+    inputs_[i] = value;
+  }
 
  private:
   EmbeddedContainer<HBasicBlock*, S> successors_;
@@ -955,6 +962,41 @@ class HUnaryControlInstruction: public HTemplateControlInstruction<2, 1> {
   virtual void PrintDataTo(StringStream* stream);
 
   HValue* value() { return OperandAt(0); }
+};
+
+
+class HBranchIndirect: public HTemplateControlInstruction<0, 1> {
+ public:
+  HBranchIndirect(HValue* value,
+                  int offset,
+                  ZoneList<HBasicBlock*>* successors,
+                  HBasicBlock* default_target)
+      : offset_(offset),
+        successors_(successors),
+        default_target_(default_target) {
+    SetOperandAt(0, value);
+  }
+
+  HValue* value() { return OperandAt(0); }
+
+  virtual Representation RequiredInputRepresentation(int index) {
+    return Representation::Integer32();
+  }
+
+  virtual void PrintDataTo(StringStream* stream);
+
+  int offset() { return offset_; }
+  HBasicBlock* SuccessorAt(int i) { return successors_->at(i); }
+  int SuccessorCount() { return successors_->length(); }
+  HBasicBlock* default_target() { return default_target_; }
+  int table_size() { return successors_->length(); }
+
+  DECLARE_CONCRETE_INSTRUCTION(BranchIndirect)
+
+ private:
+  int offset_;
+  ZoneList<HBasicBlock*>* successors_;
+  HBasicBlock* default_target_;
 };
 
 

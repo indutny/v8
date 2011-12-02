@@ -728,6 +728,7 @@ class MacroAssembler: public Assembler {
     return code_object_;
   }
 
+  void EmitLabelOffset(Label* label);
 
   // ---------------------------------------------------------------------------
   // StatsCounter support

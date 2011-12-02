@@ -2700,25 +2700,29 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
-  // We only optimize switch statements with smi-literal smi comparisons,
-  // with a bounded number of clauses.
-  const int kCaseClauseLimit = 128;
+
+  CHECK_ALIVE(VisitForValue(stmt->tag()));
+  AddSimulate(stmt->EntryId());
+
+  // 0. Check for supported clauses and decide whether to use a jump table.
   ZoneList<CaseClause*>* clauses = stmt->cases();
   int clause_count = clauses->length();
+  // We only optimize switch statements with a limited number of clauses to
+  // avoid extremely large control flow graphs.
+  const int kCaseClauseLimit = 512;
   if (clause_count > kCaseClauseLimit) {
     return Bailout("SwitchStatement: too many clauses");
   }
 
   HValue* context = environment()->LookupContext();
 
-  CHECK_ALIVE(VisitForValue(stmt->tag()));
-  AddSimulate(stmt->EntryId());
   HValue* tag_value = Pop();
   HBasicBlock* first_test_block = current_block();
 
   SwitchType switch_type = UNKNOWN_SWITCH;
 
   // 1. Extract clause type
+  ZoneList<int> keys(clause_count);
   for (int i = 0; i < clause_count; ++i) {
     CaseClause* clause = clauses->at(i);
     if (clause->is_default()) continue;
@@ -2737,6 +2741,10 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
                 !clause->label()->IsSmiLiteral())) {
       return Bailout("SwitchStatemnt: mixed label types are not supported");
     }
+
+    if (switch_type == SMI_SWITCH) {
+      keys.Add(Smi::cast(*clause->label()->AsLiteral()->handle())->value());
+    }
   }
 
   HUnaryControlInstruction* string_check = NULL;
@@ -2753,6 +2761,80 @@ void HGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     current_block()->Finish(string_check);
 
     set_current_block(first_test_block);
+  } else {
+    keys.Sort();
+
+    // Use normal compares below a certain number of clauses.
+    const int kJumpTableLimit = 20;
+    if (keys.length() > kJumpTableLimit &&
+        ((keys.last() - keys.first()) == keys.length() - 1)) {
+      // Build jump-table switch if we have a dense range of keys.
+
+      ZoneList<HBasicBlock*>* body_blocks =
+          new ZoneList<HBasicBlock*>(clause_count);
+      bool has_default = false;
+      for (int i = 0; i < clause_count; ++i) {
+        if (clauses->at(i)->is_default())  {
+          has_default = true;
+          continue;
+        }
+        body_blocks->Add(graph()->CreateBasicBlock());
+      }
+
+      HBasicBlock*  default_target = graph()->CreateBasicBlock();
+      body_blocks->Add(default_target);
+      HBranchIndirect* test = new HBranchIndirect(tag_value,
+                                                  keys.first(),
+                                                  body_blocks,
+                                                  default_target);
+      HBasicBlock* test_block = current_block();
+      test_block->Finish(test);
+      HBasicBlock* fall_through_block = NULL;
+      bool seen_default = false;
+      BreakAndContinueInfo break_info(stmt);
+      { BreakAndContinueScope push(&break_info, this);
+        for (int i = 0; i < clause_count; ++i) {
+          CaseClause* clause = clauses->at(i);
+          HBasicBlock* clause_block;
+          if (clause->is_default()) {
+            clause_block = default_target;
+            seen_default = true;
+          } else {
+            clause_block = body_blocks->at(seen_default ? i - 1 : i);
+          }
+
+          if (fall_through_block == NULL) {
+            set_current_block(clause_block);
+          } else {
+            // If there is a fall-through from above, create a join.
+            HBasicBlock* join = CreateJoin(fall_through_block,
+                                           clause_block,
+                                           clause->EntryId());
+            set_current_block(join);
+          }
+          CHECK_BAILOUT(VisitStatements(clause->statements()));
+          fall_through_block = current_block();
+        }
+      }
+      // Create an up-to-3-way join.  Use the break block if it exists since
+      // it's already a join block.
+      HBasicBlock* break_block = break_info.break_block();
+      if (break_block == NULL) {
+        if (!has_default) {
+          set_current_block(CreateJoin(fall_through_block,
+                                       default_target,
+                                       stmt->ExitId()));
+        } else {
+          set_current_block(fall_through_block);
+        }
+      } else {
+        if (fall_through_block != NULL) fall_through_block->Goto(break_block);
+        if (!has_default) default_target->Goto(break_block);
+        break_block->SetJoinId(stmt->ExitId());
+        set_current_block(break_block);
+      }
+      return;
+    }
   }
 
   // 2. Build all the tests, with dangling true branches

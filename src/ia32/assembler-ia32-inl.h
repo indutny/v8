@@ -359,8 +359,7 @@ void Assembler::emit(const Immediate& x) {
 
 void Assembler::emit_code_relative_offset(Label* label) {
   if (label->is_bound()) {
-    int32_t pos;
-    pos = label->pos() + Code::kHeaderSize - kHeapObjectTag;
+    int32_t pos = label->pos() + Code::kHeaderSize - kHeapObjectTag;
     emit(pos);
   } else {
     emit_disp(label, Displacement::CODE_RELATIVE);

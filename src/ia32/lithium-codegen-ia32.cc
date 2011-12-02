@@ -85,7 +85,8 @@ bool LCodeGen::GenerateCode() {
   return GeneratePrologue() &&
       GenerateBody() &&
       GenerateDeferredCode() &&
-      GenerateSafepointTable();
+      GenerateSafepointTable() &&
+      GenerateJumpTargetTables();
 }
 
 
@@ -299,6 +300,28 @@ bool LCodeGen::GenerateDeferredCode() {
   // Deferred code is the last part of the instruction sequence. Mark
   // the generated code as done unless we bailed out.
   if (!is_aborted()) status_ = DONE;
+  return !is_aborted();
+}
+
+
+bool LCodeGen::GenerateJumpTargetTables() {
+  if (computed_branches_.length() == 0) return !is_aborted();
+
+  __ Align(kIntSize);
+  __ RecordComment(";;; Jump target tables.");
+
+  for (int i = 0; i < computed_branches_.length(); ++i) {
+    LBranchIndirect* branch = computed_branches_[i];
+    __ bind(branch->jump_targets());
+    for (int j = 0; j < branch->SuccessorCount(); ++j) {
+      LLabel* block_start =
+          chunk_->GetLabel(branch->SuccessorAt(j)->block_id());
+      while (block_start->HasReplacement()) {
+        block_start = block_start->replacement();
+      }
+      __ EmitLabelOffset(block_start->label());
+    }
+  }
   return !is_aborted();
 }
 
@@ -1503,6 +1526,29 @@ void LCodeGen::DoBranch(LBranch* instr) {
       DeoptimizeIf(no_condition, instr->environment());
     }
   }
+}
+
+
+void LCodeGen::DoBranchIndirect(LBranchIndirect* instr) {
+  Register input = ToRegister(instr->InputAt(0));
+  Register temp = ToRegister(instr->TempAt(0));
+
+  if (instr->hydrogen()->offset() != 0) {
+  // Adjust index so that we can test a range 0..n.
+    __ sub(Operand(input), Immediate(instr->hydrogen()->offset()));
+  }
+  // Test input range. Use unsigned compare since the range is always 0..n.
+  int default_id = instr->hydrogen()->default_target()->block_id();
+  int default_block = chunk_->LookupDestination(default_id);
+  __ cmp(input, instr->hydrogen()->table_size() - 1);
+  __ j(above, chunk_->GetAssemblyLabel(default_block));
+  // Calculate target address.
+  __ mov(temp, Immediate(masm()->CodeObject()));
+  __ add(Operand(temp), Immediate::CodeRelativeOffset(instr->jump_targets()));
+  __ mov(temp, Operand(temp, input, times_4, 0));
+  __ add(Operand(temp), Immediate(masm()->CodeObject()));
+  __ jmp(Operand(temp));
+  computed_branches_.Add(instr);
 }
 
 

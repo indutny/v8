@@ -1162,6 +1162,7 @@ class Assembler : public AssemblerBase {
 
   friend class CodePatcher;
   friend class EnsureSpace;
+  friend class MacroAssembler;
 
   // Code buffer:
   // The buffer into which code and relocation info are generated.

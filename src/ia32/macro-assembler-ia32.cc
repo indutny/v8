@@ -2187,6 +2187,11 @@ void MacroAssembler::Move(Register dst, Handle<Object> value) {
 }
 
 
+void MacroAssembler::EmitLabelOffset(Label* label) {
+  emit_code_relative_offset(label);
+}
+
+
 void MacroAssembler::SetCounter(StatsCounter* counter, int value) {
   if (FLAG_native_code_counters && counter->Enabled()) {
     mov(Operand::StaticVariable(ExternalReference(counter)), Immediate(value));
