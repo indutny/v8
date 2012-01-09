@@ -12065,17 +12065,21 @@ void NumberDictionary::UpdateMaxNumberKey(uint32_t key) {
   // If the dictionary requires slow elements an element has already
   // been added at a high index.
   if (requires_slow_elements()) return;
+  uint32_t hashed_key = NumberDictionaryShape::MixinSeed(
+      key,
+      GetHeap()->StringHashSeed()
+  );
   // Check if this index is high enough that we should require slow
   // elements.
-  if (key > kRequiresSlowElementsLimit) {
+  if (hashed_key > kRequiresSlowElementsLimit) {
     set_requires_slow_elements();
     return;
   }
   // Update max key value.
   Object* max_index_object = get(kMaxNumberKeyIndex);
-  if (!max_index_object->IsSmi() || max_number_key() < key) {
+  if (!max_index_object->IsSmi() || max_number_key() < hashed_key) {
     FixedArray::set(kMaxNumberKeyIndex,
-                    Smi::FromInt(key << kRequiresSlowElementsTagSize));
+                    Smi::FromInt(hashed_key << kRequiresSlowElementsTagSize));
   }
 }
 
@@ -12109,13 +12113,17 @@ Handle<NumberDictionary> NumberDictionary::Set(
 MaybeObject* NumberDictionary::Set(uint32_t key,
                                    Object* value,
                                    PropertyDetails details) {
-  int entry = FindEntry(key);
-  if (entry == kNotFound) return AddNumberEntry(key, value, details);
+  uint32_t hashed_key = NumberDictionaryShape::MixinSeed(
+      key,
+      GetHeap()->StringHashSeed()
+  );
+  int entry = FindEntry(hashed_key);
+  if (entry == kNotFound) return AddNumberEntry(hashed_key, value, details);
   // Preserve enumeration index.
   details = PropertyDetails(details.attributes(),
                             details.type(),
                             DetailsAt(entry).index());
-  MaybeObject* maybe_object_key = NumberDictionaryShape::AsObject(key);
+  MaybeObject* maybe_object_key = NumberDictionaryShape::AsObject(hashed_key);
   Object* object_key;
   if (!maybe_object_key->ToObject(&object_key)) return maybe_object_key;
   SetEntry(entry, object_key, value, details);

@@ -984,11 +984,26 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
 
   Label done;
 
+  // First of all lets assign to r1 value of HashSeed
+  if (Serializer::enabled()) {
+    ExternalReference roots_array_start =
+        ExternalReference::roots_array_start(isolate());
+    mov(r1, Immediate(Heap::kStringHashSeedRootIndex));
+    mov(r1, Operand::StaticArray(r1,
+                                 times_pointer_size,
+                                 roots_array_start));
+  } else {
+    int32_t seed = isolate()->heap()->StringHashSeed();
+    lea(r1, Operand(seed, RelocInfo::NONE));
+  }
+
+  // Xor original key with a seed
+  xor_(r1, r0);
+
   // Compute the hash code from the untagged key.  This must be kept in sync
   // with ComputeIntegerHash in utils.h.
   //
   // hash = ~hash + (hash << 15);
-  mov(r1, r0);
   not_(r0);
   shl(r1, 15);
   add(r0, r1);

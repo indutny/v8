@@ -4535,6 +4535,11 @@ bool NumberDictionaryShape::IsMatch(uint32_t key, Object* other) {
 }
 
 
+uint32_t NumberDictionaryShape::MixinSeed(uint32_t key, uint32_t seed) {
+  return key ^ seed;
+}
+
+
 uint32_t NumberDictionaryShape::Hash(uint32_t key) {
   return ComputeIntegerHash(key);
 }
