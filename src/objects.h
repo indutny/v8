@@ -3000,7 +3000,6 @@ class StringDictionary: public Dictionary<StringDictionaryShape, String*> {
 class NumberDictionaryShape {
  public:
   static inline bool IsMatch(uint32_t key, Object* other);
-  static inline uint32_t MixinSeed(uint32_t key, uint32_t seed);
   static inline uint32_t Hash(uint32_t key);
   static inline uint32_t HashForObject(uint32_t key, Object* object);
   MUST_USE_RESULT static inline MaybeObject* AsObject(uint32_t key);
