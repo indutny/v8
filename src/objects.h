@@ -2591,6 +2591,14 @@ class DescriptorArray: public FixedArray {
 template<typename Shape, typename Key>
 class HashTable: public FixedArray {
  public:
+  virtual uint32_t Hash(Key key) {
+    return Shape::Hash(key);
+  }
+
+  virtual uint32_t HashForObject(Key key, Object* object) {
+    return Shape::HashForObject(key, object);
+  }
+
   // Returns the number of elements in the hash table.
   int NumberOfElements() {
     return Smi::cast(get(kNumberOfElementsIndex))->value();
@@ -2675,6 +2683,8 @@ class HashTable: public FixedArray {
   // Find entry for key otherwise return kNotFound.
   inline int FindEntry(Key key);
   int FindEntry(Isolate* isolate, Key key);
+
+  virtual ~HashTable();
 
  protected:
   // Find the entry at which to insert element with the given key that
@@ -3000,8 +3010,6 @@ class StringDictionary: public Dictionary<StringDictionaryShape, String*> {
 class NumberDictionaryShape {
  public:
   static inline bool IsMatch(uint32_t key, Object* other);
-  static inline uint32_t Hash(uint32_t key);
-  static inline uint32_t HashForObject(uint32_t key, Object* object);
   MUST_USE_RESULT static inline MaybeObject* AsObject(uint32_t key);
   static const int kPrefixSize = 2;
   static const int kEntrySize = 3;
@@ -3011,6 +3019,9 @@ class NumberDictionaryShape {
 
 class NumberDictionary: public Dictionary<NumberDictionaryShape, uint32_t> {
  public:
+  uint32_t Hash(uint32_t key);
+  uint32_t HashForObject(uint32_t key, Object* object);
+
   static NumberDictionary* cast(Object* obj) {
     ASSERT(obj->IsDictionary());
     return reinterpret_cast<NumberDictionary*>(obj);

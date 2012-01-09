@@ -2057,7 +2057,7 @@ int HashTable<Shape, Key>::FindEntry(Key key) {
 template<typename Shape, typename Key>
 int HashTable<Shape, Key>::FindEntry(Isolate* isolate, Key key) {
   uint32_t capacity = Capacity();
-  uint32_t entry = FirstProbe(Shape::Hash(key), capacity);
+  uint32_t entry = FirstProbe(Hash(key), capacity);
   uint32_t count = 1;
   // EnsureCapacity will guarantee the hash table is never full.
   while (true) {
@@ -4535,12 +4535,12 @@ bool NumberDictionaryShape::IsMatch(uint32_t key, Object* other) {
 }
 
 
-uint32_t NumberDictionaryShape::Hash(uint32_t key) {
+uint32_t NumberDictionary::Hash(uint32_t key) {
   return ComputeIntegerHash(key);
 }
 
 
-uint32_t NumberDictionaryShape::HashForObject(uint32_t key, Object* other) {
+uint32_t NumberDictionary::HashForObject(uint32_t key, Object* other) {
   ASSERT(other->IsNumber());
   return ComputeIntegerHash(static_cast<uint32_t>(other->Number()));
 }

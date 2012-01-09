@@ -254,8 +254,9 @@ class BitField {
 
 // Thomas Wang, Integer Hash Functions.
 // http://www.concentric.net/~Ttwang/tech/inthash.htm
-inline uint32_t ComputeIntegerHash(uint32_t key) {
+inline uint32_t ComputeIntegerHash(uint32_t key, uint32_t seed = 0) {
   uint32_t hash = key;
+  hash = hash ^ seed;
   hash = ~hash + (hash << 15);  // hash = (hash << 15) - hash - 1;
   hash = hash ^ (hash >> 12);
   hash = hash + (hash << 2);
