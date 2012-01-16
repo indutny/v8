@@ -1216,7 +1216,7 @@ HeapSnapshot::HeapSnapshot(HeapSnapshotsCollection* collection,
       entries_sorted_(false) {
   STATIC_ASSERT(
       sizeof(HeapGraphEdge) ==
-      SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapGraphEdgeSize);  // NOLINT
+      SnapshotSizeConstants<kPointerSize>::kExpectedHeapGraphEdgeSize);
   STATIC_ASSERT(
       sizeof(HeapEntry) ==
       SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapEntrySize);  // NOLINT
@@ -2135,7 +2135,7 @@ void V8HeapExplorer::ExtractElementReferences(JSObject* js_obj,
       }
     }
   } else if (js_obj->HasDictionaryElements()) {
-    NumberDictionary* dictionary = js_obj->element_dictionary();
+    SeededNumberDictionary* dictionary = js_obj->element_dictionary();
     int length = dictionary->Capacity();
     for (int i = 0; i < length; ++i) {
       Object* k = dictionary->KeyAt(i);
