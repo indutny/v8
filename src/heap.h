@@ -79,7 +79,7 @@ inline Heap* _inline_get_heap_();
   V(FixedArray, single_character_string_cache, SingleCharacterStringCache)     \
   V(FixedArray, string_split_cache, StringSplitCache)                          \
   V(Object, termination_exception, TerminationException)                       \
-  V(Smi, string_hash_seed, StringHashSeed)                                     \
+  V(Smi, hash_seed, HashSeed)                                                  \
   V(FixedArray, empty_fixed_array, EmptyFixedArray)                            \
   V(ByteArray, empty_byte_array, EmptyByteArray)                               \
   V(FixedDoubleArray, empty_fixed_double_array, EmptyFixedDoubleArray)         \
@@ -1301,9 +1301,9 @@ class Heap {
     if (global_gc_epilogue_callback_ != NULL) global_gc_epilogue_callback_();
   }
 
-  uint32_t StringHashSeed() {
-    uint32_t seed = static_cast<uint32_t>(string_hash_seed()->value());
-    ASSERT(FLAG_randomize_string_hashes || seed == 0);
+  uint32_t HashSeed() {
+    uint32_t seed = static_cast<uint32_t>(hash_seed()->value());
+    ASSERT(FLAG_randomize_hashes || seed == 0);
     return seed;
   }
 

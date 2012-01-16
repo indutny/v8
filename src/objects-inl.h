@@ -2077,7 +2077,7 @@ int HashTable<Shape, Key>::FindEntry(Key key) {
 template<typename Shape, typename Key>
 int HashTable<Shape, Key>::FindEntry(Isolate* isolate, Key key) {
   uint32_t capacity = Capacity();
-  uint32_t entry = FirstProbe(Shape::Hash(key), capacity);
+  uint32_t entry = FirstProbe(HashTable<Shape, Key>::Hash(key), capacity);
   uint32_t count = 1;
   // EnsureCapacity will guarantee the hash table is never full.
   while (true) {
@@ -4243,7 +4243,7 @@ StringHasher::StringHasher(int length, uint32_t seed)
     is_array_index_(0 < length_ && length_ <= String::kMaxArrayIndexSize),
     is_first_char_(true),
     is_valid_(true) {
-  ASSERT(FLAG_randomize_string_hashes || raw_running_hash_ == 0);
+  ASSERT(FLAG_randomize_hashes || raw_running_hash_ == 0);
 }
 
 
@@ -4477,15 +4477,28 @@ bool NumberDictionaryShape::IsMatch(uint32_t key, Object* other) {
 
 
 uint32_t NumberDictionaryShape::Hash(uint32_t key) {
-  return ComputeIntegerHash(key);
+  // This function is unreachable, since shape has UsesSeed=true flag.
+  UNREACHABLE();
+  return 0;
 }
 
 
 uint32_t NumberDictionaryShape::HashForObject(uint32_t key, Object* other) {
-  ASSERT(other->IsNumber());
-  return ComputeIntegerHash(static_cast<uint32_t>(other->Number()));
+  // This function is unreachable, since shape has UsesSeed=true flag.
+  UNREACHABLE();
+  return 0;
 }
 
+uint32_t NumberDictionaryShape::SeededHash(uint32_t key, uint32_t seed) {
+  return ComputeIntegerHash(key, seed);
+}
+
+uint32_t NumberDictionaryShape::SeededHashForObject(uint32_t key,
+                                                    uint32_t seed,
+                                                    Object* other) {
+  ASSERT(other->IsNumber());
+  return ComputeIntegerHash(static_cast<uint32_t>(other->Number()), seed);
+}
 
 MaybeObject* NumberDictionaryShape::AsObject(uint32_t key) {
   return Isolate::Current()->heap()->NumberFromUint32(key);
