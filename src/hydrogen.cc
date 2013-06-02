@@ -5002,7 +5002,11 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     clause_test_blocks.Add(NULL, zone());
   }
 
+  // Number of top cases that are executing at relatively the same speed.
   const int kClauseReorderSoftLimit = 5;
+
+  // Maximum percent of `min_hit / max_hit` at which optimization is
+  // still allowed.
   const int kClauseMinDeltaHit = 50;
 
   // Reorder clauses only if there's a significant difference between
