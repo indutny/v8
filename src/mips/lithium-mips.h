@@ -457,7 +457,8 @@ class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 2> {
   LDeoptCounterAdd(int counter,
                    int delta,
                    LOperand* temp,
-                   LOperand* temp2) : counter_(counter), delta_(delta) {
+                   LOperand* temp2) : counter_(counter),
+                                      delta_(delta) {
     temps_[0] = temp;
     temps_[1] = temp2;
   }

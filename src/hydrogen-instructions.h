@@ -1520,6 +1520,9 @@ class HDeoptimize: public HControlInstruction {
 };
 
 
+// Deoptimization counter is a conditional deoptimization instruction, executing
+// only when HDeoptCounter's internal cell value is <= 0.
+// Value itself can be manipulated by using HDeoptCounterAdd instruction.
 class HDeoptCounter: public HTemplateInstruction<0> {
  public:
   HDeoptCounter(int id, int initial_value, int max_value)
@@ -1550,6 +1553,8 @@ class HDeoptCounter: public HTemplateInstruction<0> {
 };
 
 
+// Modify HDeoptCounter's cell's value by adding `delta` to it.
+// NOTE: May cause soft deoptimization on negative or zero cell's value.
 class HDeoptCounterAdd: public HTemplateInstruction<0> {
  public:
   explicit HDeoptCounterAdd(HDeoptCounter* counter, int delta)
