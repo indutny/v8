@@ -5034,6 +5034,7 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     CHECK_ALIVE(VisitForValue(clause->label()));
     HValue* label_value = Pop();
 
+    // Save test block for later traversal in AST-order
     clause_test_blocks[index] = current_block();
     HBasicBlock* next_test_block = graph()->CreateBasicBlock();
     HBasicBlock* body_block = graph()->CreateBasicBlock();
@@ -5094,9 +5095,8 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
     for (int i = 0; i < clause_count; ++i) {
-      int index = ordered_clauses.at(i)->index();
-      HBasicBlock* curr_test_block = clause_test_blocks.at(index);
-      CaseClause* clause = ordered_clauses.at(i)->clause();
+      HBasicBlock* curr_test_block = clause_test_blocks.at(i);
+      CaseClause* clause = clauses->at(i);
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.
@@ -5108,7 +5108,6 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
         }
       } else if (!curr_test_block->end()->IsDeoptimize()) {
         normal_block = curr_test_block->end()->FirstSuccessor();
-        curr_test_block = curr_test_block->end()->SecondSuccessor();
       }
 
       // Identify a block to emit the body into.
