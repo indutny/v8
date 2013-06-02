@@ -4980,15 +4980,18 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   // 0. Order clauses by hit count
   ZoneList<ClauseMapping*> ordered_clauses(clause_count, zone());
   ZoneList<HBasicBlock*> clause_test_blocks(clause_count, zone());
-  bool reorder_clauses = false;
+  int max_hit = 0;
+  int min_hit = clause_count == 0 ? 0 : kMaxInt;
   for (int i = 0; i < clause_count; ++i) {
-    if (clauses->at(i)->hit_count() > 0) {
-      reorder_clauses = true;
-    }
+    int hits = clauses->at(i)->hit_count();
+    if (hits > max_hit) max_hit = hits;
+    if (hits < min_hit) min_hit = hits;
+
     ordered_clauses.Add(new(zone()) ClauseMapping(i, clauses->at(i)), zone());
     clause_test_blocks.Add(NULL, zone());
   }
 
+  bool reorder_clauses = max_hit > min_hit;
   if (reorder_clauses) {
     ordered_clauses.Sort(ClauseMapping::HitCountOrder);
   }

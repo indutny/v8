@@ -1025,9 +1025,16 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
       RecordTypeFeedbackCell(clause->CounterId(), cell);
 
       // Increment counter
+      Label ok;
+      Operand counter = FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset);
+
       __ LoadHeapObject(ebx, cell);
-      __ SmiAddConstant(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
-                        Smi::FromInt(1));
+      __ SmiAddConstant(counter, Smi::FromInt(1));
+      __ j(no_overflow, &ok, Label::kNear);
+
+      // Decrement on overflow
+      __ SmiAddConstant(counter, Smi::FromInt(-1));
+      __ bind(&ok);
     }
 
     Comment cmnt(masm_, "[ Case body");
