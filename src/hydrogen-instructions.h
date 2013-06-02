@@ -104,6 +104,8 @@ class LChunkBuilder;
   V(DebugBreak)                                \
   V(DeclareGlobals)                            \
   V(DeleteProperty)                            \
+  V(DeoptCounter)                              \
+  V(DeoptCounterAdd)                           \
   V(Deoptimize)                                \
   V(Div)                                       \
   V(DummyUse)                                  \
@@ -1515,6 +1517,51 @@ class HDeoptimize: public HControlInstruction {
 
  private:
   ZoneList<HValue*> values_;
+};
+
+
+class HDeoptCounter: public HTemplateInstruction<0> {
+ public:
+  explicit HDeoptCounter(int id) : id_(id) {
+  }
+
+  virtual Representation RequiredInputRepresentation(int index) {
+    return Representation::None();
+  }
+
+  virtual void PrintDataTo(StringStream* stream);
+
+  inline int id() const { return id_; }
+
+  DECLARE_CONCRETE_INSTRUCTION(DeoptCounter)
+
+ private:
+  int id_;
+};
+
+
+class HDeoptCounterAdd: public HTemplateInstruction<0> {
+ public:
+  explicit HDeoptCounterAdd(HDeoptCounter* counter, int delta)
+      : counter_(counter),
+        delta_(delta) {
+    SetAllSideEffects();
+  }
+
+  virtual Representation RequiredInputRepresentation(int index) {
+    return Representation::None();
+  }
+
+  virtual void PrintDataTo(StringStream* stream);
+
+  inline HDeoptCounter* counter() const { return counter_; }
+  inline int delta() { return delta_; }
+
+  DECLARE_CONCRETE_INSTRUCTION(DeoptCounterAdd)
+
+ private:
+  HDeoptCounter* counter_;
+  int delta_;
 };
 
 

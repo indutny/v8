@@ -92,6 +92,7 @@ void LCodeGen::FinishCode(Handle<Code> code) {
     RegisterDependentCodeForEmbeddedMaps(code);
   }
   PopulateDeoptimizationData(code);
+  PopulateDeoptCounterCells(code);
   for (int i = 0 ; i < prototype_maps_.length(); i++) {
     prototype_maps_.at(i)->AddDependentCode(
         DependentCode::kPrototypeCheckGroup, code);
@@ -858,6 +859,20 @@ void LCodeGen::PopulateDeoptimizationData(Handle<Code> code) {
     data->SetPc(i, Smi::FromInt(env->pc_offset()));
   }
   code->set_deoptimization_data(*data);
+}
+
+
+void LCodeGen::PopulateDeoptCounterCells(Handle<Code> code) {
+  if (deopt_counter_cells_.is_empty()) return;
+  Handle<FixedArray> cells =
+      factory()->NewFixedArray(deopt_counter_cells_.length(), TENURED);
+  { ALLOW_HANDLE_DEREF(isolate(),
+                       "copying a ZoneList of counter cells into a FixedArray");
+    for (int i = 0; i < deopt_counter_cells_.length(); i++) {
+      cells->set(i, *deopt_counter_cells_[i]->cell());
+    }
+    code->set_deopt_counter_cells(*cells);
+  }
 }
 
 
@@ -5488,6 +5503,20 @@ void LCodeGen::DoLazyBailout(LLazyBailout* instr) {
   LEnvironment* env = instr->environment();
   RegisterEnvironmentForDeoptimization(env, Safepoint::kLazyDeopt);
   safepoints_.RecordLazyDeoptimizationIndex(env->deoptimization_index());
+}
+
+
+void LCodeGen::DoDeoptCounter(LDeoptCounter* instr) {
+  Handle<JSGlobalPropertyCell> cell =
+      isolate()->factory()->NewJSGlobalPropertyCell(
+          Handle<Object>(Smi::FromInt(128), isolate()));
+  deopt_counter_cells_.Add(new(zone()) LDeoptCounterCell(instr->id(), cell),
+                           zone());
+}
+
+
+void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
+  DeoptimizeIf(no_condition, instr->environment());
 }
 
 

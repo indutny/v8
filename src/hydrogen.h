@@ -1422,6 +1422,7 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
   bool inline_bailout() { return inline_bailout_; }
 
   void AddSoftDeoptimize();
+  HDeoptCounter* AddDeoptCounter();
 
   void Bailout(const char* reason);
 
@@ -1808,6 +1809,7 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
   BreakAndContinueScope* break_scope_;
 
   int inlined_count_;
+  int deopt_counter_count_;
   ZoneList<Handle<Object> > globals_;
 
   bool inline_bailout_;

@@ -404,7 +404,7 @@ void HGlobalValueNumberer::ComputeBlockSideEffects() {
     GVNFlagSet side_effects;
     while (instr != NULL) {
       side_effects.Add(instr->ChangesFlags());
-      if (instr->IsSoftDeoptimize()) {
+      if (instr->IsSoftDeoptimize() || instr->IsDeoptCounterAdd()) {
         block_side_effects_[id].RemoveAll();
         side_effects.RemoveAll();
         break;

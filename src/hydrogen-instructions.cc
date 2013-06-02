@@ -984,6 +984,16 @@ void HInductionVariableAnnotation::PrintDataTo(StringStream* stream) {
 }
 
 
+void HDeoptCounter::PrintDataTo(StringStream* stream) {
+  stream->Add("c%d", id());
+}
+
+
+void HDeoptCounterAdd::PrintDataTo(StringStream* stream) {
+  stream->Add("c%d +(%d)", counter()->id(), delta());
+}
+
+
 void HDummyUse::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
 }

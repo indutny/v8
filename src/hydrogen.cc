@@ -1940,6 +1940,7 @@ HOptimizedGraphBuilder::HOptimizedGraphBuilder(CompilationInfo* info)
       ast_context_(NULL),
       break_scope_(NULL),
       inlined_count_(0),
+      deopt_counter_count_(0),
       globals_(10, info->zone()),
       inline_bailout_(false) {
   // This is not initialized in the initializer list because the
@@ -4641,6 +4642,13 @@ void HOptimizedGraphBuilder::AddSoftDeoptimize() {
 }
 
 
+HDeoptCounter* HOptimizedGraphBuilder::AddDeoptCounter() {
+  HDeoptCounter* res = new(zone()) HDeoptCounter(deopt_counter_count_++);
+  AddInstruction(res);
+  return res;
+}
+
+
 template <class Instruction>
 HInstruction* HOptimizedGraphBuilder::PreProcessCall(Instruction* call) {
   int count = call->argument_count();
@@ -4991,13 +4999,27 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     clause_test_blocks.Add(NULL, zone());
   }
 
+  const int kClauseReorderSoftLimit = 5;
   bool reorder_clauses = max_hit > min_hit;
+  int counter_ratio = 0;
+  HDeoptCounter* counter = NULL;
   if (reorder_clauses) {
+    int above_counter = 0;
+    int below_counter = 0;
     ordered_clauses.Sort(ClauseMapping::HitCountOrder);
+    for (int i = 0; i < clause_count; ++i) {
+      int hits = ordered_clauses.at(i)->clause()->hit_count();
+      if (i < kClauseReorderSoftLimit) {
+        above_counter += hits;
+      } else {
+        below_counter += hits;
+      }
+    }
+    counter_ratio = below_counter == 0 ? 0 : 1 + above_counter / below_counter;
+    counter = AddDeoptCounter();
   }
 
   // 1. Build all the tests, with dangling true branches
-  const int kClauseReorderSoftLimit = 5;
   BailoutId default_id = BailoutId::None();
   for (int i = 0; i < clause_count; ++i) {
     int index = ordered_clauses.at(i)->index();
@@ -5018,9 +5040,13 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
     HControlInstruction* compare;
 
-    // Deoptimize on reaching far clauses
-    if (reorder_clauses && i >= kClauseReorderSoftLimit) {
-      AddSoftDeoptimize();
+    // Deoptimize when balance shifts from top clauses
+    if (reorder_clauses) {
+      if (i == 0 || i == kClauseReorderSoftLimit) {
+        int delta = i == 0 ? counter_ratio : -(counter_ratio + 1);
+        AddInstruction(new(zone()) HDeoptCounterAdd(counter, delta));
+        AddSimulate(clause->EntryId());
+      }
     }
 
     if (stmt->switch_type() == SwitchStatement::SMI_SWITCH) {

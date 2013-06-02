@@ -1010,6 +1010,7 @@ class CaseClause: public ZoneObject {
   int position() const { return position_; }
   void set_position(int pos) { position_ = pos; }
 
+  BailoutId PreEntryId() const { return pre_entry_id_; }
   BailoutId EntryId() const { return entry_id_; }
 
   // Type feedback information.
@@ -1037,6 +1038,7 @@ class CaseClause: public ZoneObject {
   int hit_count_;
   const TypeFeedbackId compare_id_;
   const TypeFeedbackId counter_id_;
+  const BailoutId pre_entry_id_;
   const BailoutId entry_id_;
 };
 

@@ -5190,6 +5190,7 @@ INT_ACCESSORS(Code, prologue_offset, kPrologueOffset)
 ACCESSORS(Code, relocation_info, ByteArray, kRelocationInfoOffset)
 ACCESSORS(Code, handler_table, FixedArray, kHandlerTableOffset)
 ACCESSORS(Code, deoptimization_data, FixedArray, kDeoptimizationDataOffset)
+ACCESSORS(Code, deopt_counter_cells, FixedArray, kDeoptCounterCellsOffset)
 
 
 // Type feedback slot: type_feedback_info for FUNCTIONs, stub_info for STUBs.

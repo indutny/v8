@@ -4492,6 +4492,9 @@ class Code: public HeapObject {
   // [deoptimization_data]: Array containing data for deopt.
   DECL_ACCESSORS(deoptimization_data, FixedArray)
 
+  // [deopt_counter_cells]: Array containing data for deopt counters.
+  DECL_ACCESSORS(deopt_counter_cells, FixedArray)
+
   // [type_feedback_info]: Struct containing type feedback information for
   // unoptimized code. Optimized code can temporarily store the head of
   // the list of the dependent optimized functions during deoptimization.
@@ -4818,8 +4821,10 @@ class Code: public HeapObject {
   static const int kHandlerTableOffset = kRelocationInfoOffset + kPointerSize;
   static const int kDeoptimizationDataOffset =
       kHandlerTableOffset + kPointerSize;
-  static const int kTypeFeedbackInfoOffset =
+  static const int kDeoptCounterCellsOffset =
       kDeoptimizationDataOffset + kPointerSize;
+  static const int kTypeFeedbackInfoOffset =
+      kDeoptCounterCellsOffset + kPointerSize;
   static const int kGCMetadataOffset = kTypeFeedbackInfoOffset + kPointerSize;
   static const int kICAgeOffset =
       kGCMetadataOffset + kPointerSize;
