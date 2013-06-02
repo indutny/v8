@@ -441,8 +441,6 @@ class LDeoptCounter: public LTemplateInstruction<0, 0, 0> {
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounter, "deopt_counter")
 
-  virtual void PrintDataTo(StringStream* stream);
-
   int id() const { return id_; }
 
  private:
@@ -459,8 +457,6 @@ class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 1> {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounterAdd, "deopt_counter_add")
-
-  virtual void PrintDataTo(StringStream* stream);
 
   LOperand* temp() { return temps_[0]; }
   int counter() const { return counter_; }

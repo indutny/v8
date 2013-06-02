@@ -623,6 +623,19 @@ class LEnvironment: public ZoneObject {
   Zone* zone_;
 };
 
+class LDeoptCounterCell: public ZoneObject {
+ public:
+  LDeoptCounterCell(int id, Handle<JSGlobalPropertyCell> cell) : id_(id),
+                                                                 cell_(cell) {
+  }
+
+  int id() { return id_; }
+  Handle<JSGlobalPropertyCell> cell() { return cell_; }
+
+ private:
+  int id_;
+  Handle<JSGlobalPropertyCell> cell_;
+};
 
 // Iterates over the non-null, non-constant operands in an environment.
 class ShallowIterator BASE_EMBEDDED {

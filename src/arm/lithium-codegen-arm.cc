@@ -87,6 +87,7 @@ void LCodeGen::FinishCode(Handle<Code> code) {
     RegisterDependentCodeForEmbeddedMaps(code);
   }
   PopulateDeoptimizationData(code);
+  PopulateDeoptCounterCells(code);
   for (int i = 0 ; i < prototype_maps_.length(); i++) {
     prototype_maps_.at(i)->AddDependentCode(
         DependentCode::kPrototypeCheckGroup, code);
@@ -5791,6 +5792,46 @@ void LCodeGen::DoLazyBailout(LLazyBailout* instr) {
   LEnvironment* env = instr->environment();
   RegisterEnvironmentForDeoptimization(env, Safepoint::kLazyDeopt);
   safepoints_.RecordLazyDeoptimizationIndex(env->deoptimization_index());
+}
+
+
+void LCodeGen::DoDeoptCounter(LDeoptCounter* instr) {
+  Handle<JSGlobalPropertyCell> cell =
+      isolate()->factory()->NewJSGlobalPropertyCell(
+          Handle<Object>(Smi::FromInt(HDeoptCounter::kInitialValue),
+                         isolate()));
+  deopt_counter_cells_.Add(new(zone()) LDeoptCounterCell(instr->id(), cell),
+                           zone());
+}
+
+
+void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
+  for (int i = 0; i < deopt_counter_cells_.length(); ++i) {
+    if (deopt_counter_cells_[i]->id() == instr->counter()) {
+      Handle<JSGlobalPropertyCell> cell = deopt_counter_cells_[i]->cell();
+      Register scratch = ToRegister(instr->temp());
+
+      // Increment counter
+      Label ok;
+      Operand counter = FieldOperand(scratch,
+                                     JSGlobalPropertyCell::kValueOffset);
+
+      ASSERT(instr->delta() != 0);
+      __ LoadHeapObject(scratch, cell);
+      __ SmiAddConstant(counter, Smi::FromInt(instr->delta()));
+      __ j(no_overflow, &ok, Label::kNear);
+
+      // Decrement on overflow
+      __ SmiAddConstant(counter, Smi::FromInt(-instr->delta()));
+      __ bind(&ok);
+
+      // And deoptimize on negative value
+      __ SmiCompare(counter, Smi::FromInt(0));
+      DeoptimizeIf(less_equal, instr->environment());
+      return;
+    }
+  }
+  UNREACHABLE();
 }
 
 

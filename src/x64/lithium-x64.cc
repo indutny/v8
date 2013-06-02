@@ -159,16 +159,6 @@ void LGap::PrintDataTo(StringStream* stream) {
 }
 
 
-void LDeoptCounter::PrintDataTo(StringStream* stream) {
-  stream->Add("c%d", id());
-}
-
-
-void LDeoptCounterAdd::PrintDataTo(StringStream* stream) {
-  stream->Add("c%d +(%d)", counter(), delta());
-}
-
-
 const char* LArithmeticD::Mnemonic() const {
   switch (op()) {
     case Token::ADD: return "add-d";
@@ -721,11 +711,6 @@ LInstruction* LChunkBuilder::DoSoftDeoptimize(HSoftDeoptimize* instr) {
 }
 
 
-LInstruction* LChunkBuilder::DoDeoptimize(HDeoptimize* instr) {
-  return AssignEnvironment(new(zone()) LDeoptimize);
-}
-
-
 LInstruction* LChunkBuilder::DoDeoptCounter(HDeoptCounter* instr) {
   return AssignEnvironment(new(zone()) LDeoptCounter(instr->id()));
 }
@@ -736,6 +721,11 @@ LInstruction* LChunkBuilder::DoDeoptCounterAdd(HDeoptCounterAdd* instr) {
   return AssignEnvironment(new(zone()) LDeoptCounterAdd(instr->counter()->id(),
                                                         instr->delta(),
                                                         temp));
+}
+
+
+LInstruction* LChunkBuilder::DoDeoptimize(HDeoptimize* instr) {
+  return AssignEnvironment(new(zone()) LDeoptimize);
 }
 
 

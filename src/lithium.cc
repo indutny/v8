@@ -492,4 +492,19 @@ void LChunk::set_allocated_double_registers(BitVector* allocated_registers) {
 }
 
 
+// Common method
+void LCodeGen::PopulateDeoptCounterCells(Handle<Code> code) {
+  if (deopt_counter_cells_.is_empty()) return;
+  Handle<FixedArray> cells =
+      factory()->NewFixedArray(deopt_counter_cells_.length(), TENURED);
+  { ALLOW_HANDLE_DEREF(isolate(),
+                       "copying a ZoneList of counter cells into a FixedArray");
+    for (int i = 0; i < deopt_counter_cells_.length(); i++) {
+      cells->set(i, *deopt_counter_cells_[i]->cell());
+    }
+    code->set_deopt_counter_cells(*cells);
+  }
+}
+
+
 } }  // namespace v8::internal

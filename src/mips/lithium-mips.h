@@ -93,6 +93,8 @@ class LCodeGen;
   V(DebugBreak)                                 \
   V(DeclareGlobals)                             \
   V(DeleteProperty)                             \
+  V(DeoptCounter)                               \
+  V(DeoptCounterAdd)                            \
   V(Deoptimize)                                 \
   V(DivI)                                       \
   V(DoubleToI)                                  \
@@ -426,6 +428,40 @@ class LDummyUse: public LTemplateInstruction<1, 1, 0> {
     inputs_[0] = value;
   }
   DECLARE_CONCRETE_INSTRUCTION(DummyUse, "dummy-use")
+};
+
+
+class LDeoptCounter: public LTemplateInstruction<0, 0, 0> {
+ public:
+  explicit LDeoptCounter(int id) : id_(id) {
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(DeoptCounter, "deopt_counter")
+
+  int id() const { return id_; }
+
+ private:
+  int id_;
+};
+
+
+class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 1> {
+ public:
+  LDeoptCounterAdd(int counter,
+                   int delta,
+                   LOperand* temp) : counter_(counter), delta_(delta) {
+    temps_[0] = temp;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(DeoptCounterAdd, "deopt_counter_add")
+
+  LOperand* temp() { return temps_[0]; }
+  int counter() const { return counter_; }
+  int delta() const { return delta_; }
+
+ private:
+  int counter_;
+  int delta_;
 };
 
 

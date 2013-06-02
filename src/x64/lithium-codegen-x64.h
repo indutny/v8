@@ -154,20 +154,6 @@ class LCodeGen BASE_EMBEDDED {
 #undef DECLARE_DO
 
  private:
-  class LDeoptCounterCell: public ZoneObject {
-   public:
-    LDeoptCounterCell(int id, Handle<JSGlobalPropertyCell> cell) : id_(id),
-                                                                   cell_(cell) {
-    }
-
-    int id() { return id_; }
-    Handle<JSGlobalPropertyCell> cell() { return cell_; }
-
-   private:
-    int id_;
-    Handle<JSGlobalPropertyCell> cell_;
-  };
-
   enum Status {
     UNUSED,
     GENERATING,

@@ -707,6 +707,19 @@ LInstruction* LChunkBuilder::DoSoftDeoptimize(HSoftDeoptimize* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoDeoptCounter(HDeoptCounter* instr) {
+  return AssignEnvironment(new(zone()) LDeoptCounter(instr->id()));
+}
+
+
+LInstruction* LChunkBuilder::DoDeoptCounterAdd(HDeoptCounterAdd* instr) {
+  LOperand* temp = TempRegister();
+  return AssignEnvironment(new(zone()) LDeoptCounterAdd(instr->counter()->id(),
+                                                        instr->delta(),
+                                                        temp));
+}
+
+
 LInstruction* LChunkBuilder::DoDeoptimize(HDeoptimize* instr) {
   return AssignEnvironment(new(zone()) LDeoptimize);
 }
