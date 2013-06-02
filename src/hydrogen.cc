@@ -5013,18 +5013,14 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   HDeoptCounter* counter = NULL;
 
   // If hit distribution doesn't change much - counter should always stay
-  // below zero. We can accomplish this by finding two optimal weights: one
-  // added to counter when matching clause above soft mark, and one substracted
-  // from counter when reaching clauses below soft mark.
-  //
-  // Calculate this weights.
-  int above_weight = 1;
-  int below_weight = 1;
+  // below zero. Check that clauses above te soft mark have more weight than
+  // clauses below the mark, and add CounterAdd instruction at the soft mark
+  // boundary with +1, -1 values to catch distribution change.
   if (reorder_clauses) {
     ordered_clauses.Sort(ClauseMapping::HitCountOrder);
 
-    double above = 1;
-    double below = 1;
+    double above = 0;
+    double below = 0;
     for (int i = 0; i < clause_count; ++i) {
       double hits =
           static_cast<double>(ordered_clauses.at(i)->clause()->hit_count());
@@ -5035,24 +5031,9 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       }
     }
 
-    if (below > above) {
-      above = (100 * above) / below;
-      below = 100;
-    } else {
-      below = (100 * below) / above;
-      above = 100;
-    }
-
-    above_weight = static_cast<int>(floor(above));
-    below_weight = static_cast<int>(ceil(below));
-
-    if (above_weight == below_weight) {
-      below_weight++;
-    }
-
-    int initial = above_weight * below_weight;
-    if (Smi::IsValid(initial * 2)) {
-      counter = AddDeoptCounter(initial, initial * 2);
+    double max = static_cast<double>(max_hit) * kClauseReorderSoftLimit;
+    if (above > below && max < Smi::kMaxValue && Smi::IsValid(max)) {
+      counter = AddDeoptCounter(max_hit, max);
     }
   }
 
@@ -5081,10 +5062,7 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     // Deoptimize when balance shifts from top clauses to bottom ones
     if (counter != NULL) {
       if (i == 0 || i == kClauseReorderSoftLimit) {
-        int delta = i == 0 ? below_weight : -(below_weight + above_weight);
-        if (delta != 0) {
-          AddInstruction(new(zone()) HDeoptCounterAdd(counter, delta));
-        }
+        AddInstruction(new(zone()) HDeoptCounterAdd(counter, i == 0 ? 1 : -2));
       }
     }
 

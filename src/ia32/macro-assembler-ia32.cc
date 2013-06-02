@@ -691,14 +691,6 @@ void MacroAssembler::AssertSmi(Register object) {
 }
 
 
-void MacroAssembler::AssertSmi(Operand object) {
-  if (emit_debug_code()) {
-    test(object, Immediate(kSmiTagMask));
-    Check(equal, "Operand is not a smi");
-  }
-}
-
-
 void MacroAssembler::AssertString(Register object) {
   if (emit_debug_code()) {
     test(object, Immediate(kSmiTagMask));

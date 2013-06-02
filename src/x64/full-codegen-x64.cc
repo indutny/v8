@@ -1042,13 +1042,15 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
       Operand counter = FieldOperand(rbx, JSGlobalPropertyCell::kValueOffset);
 
       __ LoadHeapObject(rbx, cell);
-      __ AssertSmi(counter);
-      __ SmiAddConstant(counter, Smi::FromInt(1));
+      __ mov(rcx, counter);
+      __ AssertSmi(rcx);
+      __ SmiAddConstant(rcx, rcx, Smi::FromInt(1));
       __ j(no_overflow, &ok, Label::kNear);
 
       // Decrement on overflow
-      __ SmiAddConstant(counter, Smi::FromInt(-1));
+      __ SmiAddConstant(rcx, Smi::FromInt(-1));
       __ bind(&ok);
+      __ mov(counter, rcx);
     }
 
     Comment cmnt(masm_, "[ Case body");
