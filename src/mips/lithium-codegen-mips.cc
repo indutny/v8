@@ -5583,24 +5583,31 @@ void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
     if (deopt_counter_cells_[i]->id() == instr->counter()) {
       Handle<JSGlobalPropertyCell> cell = deopt_counter_cells_[i]->cell();
       Register scratch = ToRegister(instr->temp());
+      Register scratch2 = ToRegister(instr->temp2());
+      Register scratch3 = ToRegister(instr->temp3());
 
       // Increment counter
       Label ok;
-      Operand counter = FieldOperand(scratch,
-                                     JSGlobalPropertyCell::kValueOffset);
+      MemOperand counter =
+          FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset);
 
       ASSERT(instr->delta() != 0);
       __ LoadHeapObject(scratch, cell);
-      __ SmiAddConstant(counter, Smi::FromInt(instr->delta()));
-      __ j(no_overflow, &ok, Label::kNear);
+      __ lw(scratch2, counter);
+      __ Addu(scratch2, scratch2, Operand(Smi::FromInt(instr->delta())));
+      __ SmiTagCheckOverflow(scratch2, scratch3);
+      __ BranchOnNoOverflow(&ok, scratch3);
 
       // Decrement on overflow
-      __ SmiAddConstant(counter, Smi::FromInt(-instr->delta()));
+      __ Subu(scratch2, scratch2, Operand(Smi::FromInt(instr->delta())));
       __ bind(&ok);
+      __ sw(scratch2, counter);
 
       // And deoptimize on negative value
-      __ SmiCompare(counter, Smi::FromInt(0));
-      DeoptimizeIf(less_equal, instr->environment());
+      DeoptimizeIf(le,
+                   instr->environment(),
+                   scratch2,
+                   Operand(Smi::FromInt(0)));
       return;
     }
   }

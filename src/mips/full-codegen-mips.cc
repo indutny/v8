@@ -1077,15 +1077,19 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
 
       // Increment counter
       Label ok;
-      Operand counter = FieldOperand(a1, JSGlobalPropertyCell::kValueOffset);
+      MemOperand counter =
+          FieldMemOperand(a1, JSGlobalPropertyCell::kValueOffset);
 
       __ LoadHeapObject(a1, cell);
-      __ SmiAddConstant(counter, Smi::FromInt(1));
-      __ j(no_overflow, &ok, Label::kNear);
+      __ lw(a2, counter);
+      __ Addu(a2, a2, Operand(Smi::FromInt(1)));
+      __ SmiTagCheckOverflow(a2, a3);
+      __ BranchOnNoOverflow(&ok, a3);
 
       // Decrement on overflow
-      __ SmiAddConstant(counter, Smi::FromInt(-1));
+      __ Subu(a2, a2, Operand(Smi::FromInt(1)));
       __ bind(&ok);
+      __ sw(a2, counter);
     }
 
     Comment cmnt(masm_, "[ Case body");
