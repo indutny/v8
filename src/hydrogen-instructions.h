@@ -1535,6 +1535,8 @@ class HDeoptCounter: public HTemplateInstruction<0> {
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounter)
 
+  static const int kInitialValue = 128;
+
  private:
   int id_;
 };

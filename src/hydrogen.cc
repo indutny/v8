@@ -5015,7 +5015,7 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
         below_counter += hits;
       }
     }
-    counter_ratio = below_counter == 0 ? 0 : 1 + above_counter / below_counter;
+    counter_ratio = below_counter == 0 ? 1 : 1 + above_counter / below_counter;
     counter = AddDeoptCounter();
   }
 

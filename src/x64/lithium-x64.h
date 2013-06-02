@@ -443,24 +443,28 @@ class LDeoptCounter: public LTemplateInstruction<0, 0, 0> {
 
   virtual void PrintDataTo(StringStream* stream);
 
-  inline int id() const { return id_; }
+  int id() const { return id_; }
 
  private:
   int id_;
 };
 
 
-class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 0> {
+class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 1> {
  public:
-  LDeoptCounterAdd(int counter, int delta) : counter_(counter), delta_(delta) {
+  LDeoptCounterAdd(int counter,
+                   int delta,
+                   LOperand* temp) : counter_(counter), delta_(delta) {
+    temps_[0] = temp;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounterAdd, "deopt_counter_add")
 
   virtual void PrintDataTo(StringStream* stream);
 
-  inline int counter() const { return counter_; }
-  inline int delta() const { return delta_; }
+  LOperand* temp() { return temps_[0]; }
+  int counter() const { return counter_; }
+  int delta() const { return delta_; }
 
  private:
   int counter_;

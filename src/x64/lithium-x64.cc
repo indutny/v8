@@ -732,8 +732,10 @@ LInstruction* LChunkBuilder::DoDeoptCounter(HDeoptCounter* instr) {
 
 
 LInstruction* LChunkBuilder::DoDeoptCounterAdd(HDeoptCounterAdd* instr) {
+  LOperand* temp = TempRegister();
   return AssignEnvironment(new(zone()) LDeoptCounterAdd(instr->counter()->id(),
-                                                        instr->delta()));
+                                                        instr->delta(),
+                                                        temp));
 }
 
 
