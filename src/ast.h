@@ -1005,6 +1005,7 @@ class CaseClause: public ZoneObject {
   }
   Label* body_target() { return &body_target_; }
   ZoneList<Statement*>* statements() const { return statements_; }
+  int hit_count() { return hit_count_; }
 
   int position() const { return position_; }
   void set_position(int pos) { position_ = pos; }
@@ -1013,6 +1014,7 @@ class CaseClause: public ZoneObject {
 
   // Type feedback information.
   TypeFeedbackId CompareId() { return compare_id_; }
+  TypeFeedbackId CounterId() { return counter_id_; }
   void RecordTypeFeedback(TypeFeedbackOracle* oracle);
   bool IsSmiCompare() { return compare_type_ == SMI_ONLY; }
   bool IsNameCompare() { return compare_type_ == NAME_ONLY; }
@@ -1032,7 +1034,9 @@ class CaseClause: public ZoneObject {
     OBJECT_ONLY
   };
   CompareTypeFeedback compare_type_;
+  int hit_count_;
   const TypeFeedbackId compare_id_;
+  const TypeFeedbackId counter_id_;
   const BailoutId entry_id_;
 };
 

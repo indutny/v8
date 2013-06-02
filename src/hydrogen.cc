@@ -4927,6 +4927,14 @@ void HOptimizedGraphBuilder::VisitWithStatement(WithStatement* stmt) {
 }
 
 
+int HOptimizedGraphBuilder::ClauseMapping::HitCountOrder(
+    ClauseMapping* const* a,
+    ClauseMapping* const* b) {
+  return (*a)->clause()->hit_count() == (*b)->clause()->hit_count() ? 0 :
+         (*a)->clause()->hit_count() > (*b)->clause()->hit_count() ? -1 : 1;
+}
+
+
 void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
@@ -4969,10 +4977,30 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     set_current_block(first_test_block);
   }
 
+  // 0. Order clauses by hit count
+  ZoneList<ClauseMapping*> ordered_clauses(clause_count, zone());
+  ZoneList<HBasicBlock*> clause_test_blocks(clause_count, zone());
+  bool reorder_clauses = false;
+  for (int i = 0; i < clause_count; ++i) {
+    if (clauses->at(i)->hit_count() > 0) {
+      fprintf(stdout, "%d %d\n", i, clauses->at(i)->hit_count());
+      reorder_clauses = true;
+    }
+    ordered_clauses.Add(new(zone()) ClauseMapping(i, clauses->at(i)), zone());
+    clause_test_blocks.Add(NULL, zone());
+  }
+
+  if (reorder_clauses) {
+    ordered_clauses.Sort(ClauseMapping::HitCountOrder);
+  }
+
   // 1. Build all the tests, with dangling true branches
+  const int kClauseReorderSoftLimit = 5;
   BailoutId default_id = BailoutId::None();
   for (int i = 0; i < clause_count; ++i) {
-    CaseClause* clause = clauses->at(i);
+    int index = ordered_clauses.at(i)->index();
+    CaseClause* clause = ordered_clauses.at(i)->clause();
+
     if (clause->is_default()) {
       default_id = clause->EntryId();
       continue;
@@ -4982,10 +5010,17 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     CHECK_ALIVE(VisitForValue(clause->label()));
     HValue* label_value = Pop();
 
+    clause_test_blocks[index] = current_block();
     HBasicBlock* next_test_block = graph()->CreateBasicBlock();
     HBasicBlock* body_block = graph()->CreateBasicBlock();
 
     HControlInstruction* compare;
+
+    // Deoptimize on reaching far clauses
+    if (reorder_clauses &&
+        (i >= kClauseReorderSoftLimit || clause->hit_count() == 0)) {
+      AddSoftDeoptimize();
+    }
 
     if (stmt->switch_type() == SwitchStatement::SMI_SWITCH) {
       if (!clause->IsSmiCompare()) {
@@ -5027,13 +5062,14 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
   // 2. Loop over the clauses and the linked list of tests in lockstep,
   // translating the clause bodies.
-  HBasicBlock* curr_test_block = first_test_block;
   HBasicBlock* fall_through_block = NULL;
 
   BreakAndContinueInfo break_info(stmt);
   { BreakAndContinueScope push(&break_info, this);
     for (int i = 0; i < clause_count; ++i) {
-      CaseClause* clause = clauses->at(i);
+      int index = ordered_clauses.at(i)->index();
+      HBasicBlock* curr_test_block = clause_test_blocks.at(index);
+      CaseClause* clause = ordered_clauses.at(i)->clause();
 
       // Identify the block where normal (non-fall-through) control flow
       // goes to.

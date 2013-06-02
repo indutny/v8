@@ -1064,10 +1064,24 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
 
   // Compile all the case bodies.
   for (int i = 0; i < clauses->length(); i++) {
-    Comment cmnt(masm_, "[ Case body");
     CaseClause* clause = clauses->at(i);
     __ bind(clause->body_target());
     PrepareForBailoutForId(clause->EntryId(), NO_REGISTERS);
+
+    // Initialize counter
+    { Comment cmnt(masm_, "[ Case hit counter");
+      Handle<JSGlobalPropertyCell> cell =
+          isolate()->factory()->NewJSGlobalPropertyCell(
+              Handle<Object>(Smi::FromInt(0), isolate()));
+      RecordTypeFeedbackCell(clause->CounterId(), cell);
+
+      // Increment counter
+      __ LoadHeapObject(a1, cell);
+      __ SmiAddConstant(FieldOperand(a1, JSGlobalPropertyCell::kValueOffset),
+                        Smi::FromInt(1));
+    }
+
+    Comment cmnt(masm_, "[ Case body");
     VisitStatements(clause->statements());
   }
 

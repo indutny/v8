@@ -1395,6 +1395,22 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
     BreakAndContinueScope* next_;
   };
 
+  class ClauseMapping : public ZoneObject {
+   public:
+    ClauseMapping(int index, CaseClause* clause) : index_(index),
+                                                   clause_(clause) {
+    }
+
+    inline int index() const { return index_; }
+    inline CaseClause* clause() const { return clause_; }
+
+    static int HitCountOrder(ClauseMapping* const* a, ClauseMapping* const* b);
+
+   private:
+    int index_;
+    CaseClause* clause_;
+  };
+
   explicit HOptimizedGraphBuilder(CompilationInfo* info);
 
   virtual bool BuildGraph();

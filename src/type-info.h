@@ -312,6 +312,7 @@ class TypeFeedbackOracle: public ZoneObject {
                    TypeInfo* overall_type);
   Handle<Map> GetCompareMap(CompareOperation* expr);
   TypeInfo SwitchType(CaseClause* clause);
+  int SwitchHitCount(CaseClause* clause);
   TypeInfo IncrementType(CountOperation* expr);
 
   Zone* zone() const { return zone_; }

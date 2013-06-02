@@ -167,7 +167,8 @@ void AstTyper::VisitSwitchStatement(SwitchStatement* stmt) {
   stmt->set_switch_type(switch_type);
 
   // TODO(rossberg): can we eliminate this special case and extra loop?
-  if (switch_type == SwitchStatement::SMI_SWITCH) {
+  if (switch_type == SwitchStatement::SMI_SWITCH ||
+      switch_type == SwitchStatement::STRING_SWITCH) {
     for (int i = 0; i < clauses->length(); ++i) {
       CaseClause* clause = clauses->at(i);
       if (!clause->is_default())

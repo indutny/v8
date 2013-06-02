@@ -516,6 +516,8 @@ void CaseClause::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
   } else {
     ASSERT(compare_type_ == NONE);
   }
+
+  hit_count_ = oracle->SwitchHitCount(this);
 }
 
 
@@ -1074,7 +1076,9 @@ CaseClause::CaseClause(Isolate* isolate,
       statements_(statements),
       position_(pos),
       compare_type_(NONE),
+      hit_count_(0),
       compare_id_(AstNode::GetNextId(isolate)),
+      counter_id_(AstNode::GetNextId(isolate)),
       entry_id_(AstNode::GetNextId(isolate)) {
 }
 

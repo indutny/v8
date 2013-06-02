@@ -490,6 +490,14 @@ TypeInfo TypeFeedbackOracle::SwitchType(CaseClause* clause) {
 }
 
 
+int TypeFeedbackOracle::SwitchHitCount(CaseClause* clause) {
+  Handle<Object> object = GetInfo(clause->CounterId());
+  if (!object->IsSmi()) return 0;
+
+  return Smi::cast(*object)->value();
+}
+
+
 TypeInfo TypeFeedbackOracle::IncrementType(CountOperation* expr) {
   Handle<Object> object = GetInfo(expr->CountBinOpFeedbackId());
   TypeInfo unknown = TypeInfo::Unknown();
