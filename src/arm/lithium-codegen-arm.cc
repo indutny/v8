@@ -5810,24 +5810,29 @@ void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
     if (deopt_counter_cells_[i]->id() == instr->counter()) {
       Handle<JSGlobalPropertyCell> cell = deopt_counter_cells_[i]->cell();
       Register scratch = ToRegister(instr->temp());
+      Register scratch2 = ToRegister(instr->temp2());
 
       // Increment counter
       Label ok;
-      Operand counter = FieldOperand(scratch,
-                                     JSGlobalPropertyCell::kValueOffset);
+      MemOperand counter = MemOperand(scratch,
+                                      JSGlobalPropertyCell::kValueOffset);
 
       ASSERT(instr->delta() != 0);
       __ LoadHeapObject(scratch, cell);
-      __ SmiAddConstant(counter, Smi::FromInt(instr->delta()));
-      __ j(no_overflow, &ok, Label::kNear);
+      __ ldr(scratch2, counter);
+      __ add(scratch2, scratch2, Operand(Smi::FromInt(instr->delta())), SetCC);
+      __ b(vc, &ok);
 
       // Decrement on overflow
-      __ SmiAddConstant(counter, Smi::FromInt(-instr->delta()));
+      __ sub(scratch2, scratch2, Operand(Smi::FromInt(instr->delta())), SetCC);
       __ bind(&ok);
 
+      // Update cell value
+      __ str(scratch2, counter);
+
       // And deoptimize on negative value
-      __ SmiCompare(counter, Smi::FromInt(0));
-      DeoptimizeIf(less_equal, instr->environment());
+      __ cmp(scratch2, Operand(Smi::FromInt(0)));
+      DeoptimizeIf(le, instr->environment());
       return;
     }
   }

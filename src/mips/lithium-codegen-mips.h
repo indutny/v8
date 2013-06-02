@@ -305,6 +305,7 @@ class LCodeGen BASE_EMBEDDED {
                         int arguments_count);
   void RegisterDependentCodeForEmbeddedMaps(Handle<Code> code);
   void PopulateDeoptimizationData(Handle<Code> code);
+  void PopulateDeoptCounterCells(Handle<Code> code);
   int DefineDeoptimizationLiteral(Handle<Object> literal);
 
   void PopulateDeoptimizationLiteralsWithInlinedFunctions();

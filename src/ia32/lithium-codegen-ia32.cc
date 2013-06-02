@@ -6414,15 +6414,15 @@ void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
 
       ASSERT(instr->delta() != 0);
       __ LoadHeapObject(scratch, cell);
-      __ SmiAddConstant(counter, Smi::FromInt(instr->delta()));
+      __ add(counter, Immediate(Smi::FromInt(instr->delta())));
       __ j(no_overflow, &ok, Label::kNear);
 
       // Decrement on overflow
-      __ SmiAddConstant(counter, Smi::FromInt(-instr->delta()));
+      __ sub(counter, Immediate(Smi::FromInt(-instr->delta())));
       __ bind(&ok);
 
       // And deoptimize on negative value
-      __ SmiCompare(counter, Smi::FromInt(0));
+      __ cmp(counter, Immediate(Smi::FromInt(0)));
       DeoptimizeIf(less_equal, instr->environment());
       return;
     }

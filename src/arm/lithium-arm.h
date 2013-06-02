@@ -448,17 +448,20 @@ class LDeoptCounter: public LTemplateInstruction<0, 0, 0> {
 };
 
 
-class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 1> {
+class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 2> {
  public:
   LDeoptCounterAdd(int counter,
                    int delta,
-                   LOperand* temp) : counter_(counter), delta_(delta) {
+                   LOperand* temp,
+                   LOperand* temp2) : counter_(counter), delta_(delta) {
     temps_[0] = temp;
+    temps_[1] = temp2;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounterAdd, "deopt_counter_add")
 
   LOperand* temp() { return temps_[0]; }
+  LOperand* temp2() { return temps_[1]; }
   int counter() const { return counter_; }
   int delta() const { return delta_; }
 
