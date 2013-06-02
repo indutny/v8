@@ -1078,6 +1078,7 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
           FieldMemOperand(r1, JSGlobalPropertyCell::kValueOffset);
 
       __ LoadHeapObject(r1, cell);
+      __ AssertSmi(counter);
       __ ldr(r2, counter);
       __ add(r2, r2, Operand(Smi::FromInt(1)), SetCC);
       __ b(vc, &ok);

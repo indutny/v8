@@ -5798,43 +5798,46 @@ void LCodeGen::DoLazyBailout(LLazyBailout* instr) {
 void LCodeGen::DoDeoptCounter(LDeoptCounter* instr) {
   Handle<JSGlobalPropertyCell> cell =
       isolate()->factory()->NewJSGlobalPropertyCell(
-          Handle<Object>(Smi::FromInt(HDeoptCounter::kInitialValue),
-                         isolate()));
-  deopt_counter_cells_.Add(new(zone()) LDeoptCounterCell(instr->id(), cell),
-                           zone());
+          Handle<Object>(Smi::FromInt(instr->initial_value()), isolate()));
+  LDeoptCounterCell* deopt_cell =
+      new(zone()) LDeoptCounterCell(instr->id(), instr->max_value(), cell);
+  deopt_counter_cells_.Add(deopt_cell, zone());
 }
 
 
 void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
   for (int i = 0; i < deopt_counter_cells_.length(); ++i) {
-    if (deopt_counter_cells_[i]->id() == instr->counter()) {
-      Handle<JSGlobalPropertyCell> cell = deopt_counter_cells_[i]->cell();
-      Register scratch = ToRegister(instr->temp());
-      Register scratch2 = ToRegister(instr->temp2());
+    LDeoptCounterCell* deopt_cell = deopt_counter_cells_[i];
+    if (deopt_cell->id() != instr->counter()) continue;
 
-      // Increment counter
-      Label ok;
-      MemOperand counter = MemOperand(scratch,
-                                      JSGlobalPropertyCell::kValueOffset);
+    Handle<JSGlobalPropertyCell> cell = deopt_cell->cell();
+    Register scratch = ToRegister(instr->temp());
+    Register scratch2 = ToRegister(instr->temp2());
 
-      ASSERT(instr->delta() != 0);
-      __ LoadHeapObject(scratch, cell);
-      __ ldr(scratch2, counter);
-      __ add(scratch2, scratch2, Operand(Smi::FromInt(instr->delta())), SetCC);
-      __ b(vc, &ok);
+    // Increment counter
+    Label ok;
+    MemOperand counter = MemOperand(scratch,
+                                    JSGlobalPropertyCell::kValueOffset);
 
-      // Decrement on overflow
-      __ sub(scratch2, scratch2, Operand(Smi::FromInt(instr->delta())), SetCC);
-      __ bind(&ok);
+    ASSERT(instr->delta() != 0);
+    __ LoadHeapObject(scratch, cell);
+    __ ldr(scratch2, counter);
+    __ AssertSmi(scratch2);
+    __ add(scratch2, scratch2, Operand(Smi::FromInt(instr->delta())));
+    __ cmp(scratch2, Operand(Smi::FromInt(deopt_cell->max_value())));
+    __ b(le, &ok);
 
-      // Update cell value
-      __ str(scratch2, counter);
+    // Limit counter
+    __ mov(scratch2, Operand(Smi::FromInt(deopt_cell->max_value())));
+    __ bind(&ok);
 
-      // And deoptimize on negative value
-      __ cmp(scratch2, Operand(Smi::FromInt(0)));
-      DeoptimizeIf(le, instr->environment());
-      return;
-    }
+    // Update cell value
+    __ str(scratch2, counter);
+
+    // And deoptimize on negative value
+    __ cmp(scratch2, Operand(Smi::FromInt(0)));
+    DeoptimizeIf(le, instr->environment(), Deoptimizer::SOFT);
+    return;
   }
   UNREACHABLE();
 }

@@ -433,35 +433,39 @@ class LDummyUse: public LTemplateInstruction<1, 1, 0> {
 
 class LDeoptCounter: public LTemplateInstruction<0, 0, 0> {
  public:
-  explicit LDeoptCounter(int id) : id_(id) {
+  LDeoptCounter(int id, int initial_value, int max_value)
+      : id_(id),
+        initial_value_(initial_value),
+        max_value_(max_value) {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounter, "deopt_counter")
 
   int id() const { return id_; }
+  int initial_value() const { return initial_value_; }
+  int max_value() const { return max_value_; }
 
  private:
   int id_;
+  int initial_value_;
+  int max_value_;
 };
 
 
-class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 3> {
+class LDeoptCounterAdd: public LTemplateInstruction<0, 0, 2> {
  public:
   LDeoptCounterAdd(int counter,
                    int delta,
                    LOperand* temp,
-                   LOperand* temp2,
-                   LOperand* temp3) : counter_(counter), delta_(delta) {
+                   LOperand* temp2) : counter_(counter), delta_(delta) {
     temps_[0] = temp;
     temps_[1] = temp2;
-    temps_[2] = temp3;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounterAdd, "deopt_counter_add")
 
   LOperand* temp() { return temps_[0]; }
   LOperand* temp2() { return temps_[1]; }
-  LOperand* temp3() { return temps_[2]; }
   int counter() const { return counter_; }
   int delta() const { return delta_; }
 

@@ -4642,8 +4642,11 @@ void HOptimizedGraphBuilder::AddSoftDeoptimize() {
 }
 
 
-HDeoptCounter* HOptimizedGraphBuilder::AddDeoptCounter() {
-  HDeoptCounter* res = new(zone()) HDeoptCounter(deopt_counter_count_++);
+HDeoptCounter* HOptimizedGraphBuilder::AddDeoptCounter(int initial_value,
+                                                       int max_value) {
+  HDeoptCounter* res = new(zone()) HDeoptCounter(deopt_counter_count_++,
+                                                 initial_value,
+                                                 max_value);
   AddInstruction(res);
   return res;
 }
@@ -5000,23 +5003,32 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   }
 
   const int kClauseReorderSoftLimit = 5;
-  bool reorder_clauses = max_hit > min_hit;
-  int counter_ratio = 0;
+  const int kClauseMinDeltaHit = 50;
+
+  // Reorder clauses only if there's a significant difference between
+  // maximum and minimum hit counts.
+  bool reorder_clauses =
+      max_hit == 0 ? false : ((100 * min_hit / max_hit) < kClauseMinDeltaHit);
+
   HDeoptCounter* counter = NULL;
+  int above_weight = 0;
+  int below_weight = 0;
   if (reorder_clauses) {
-    int above_counter = 0;
-    int below_counter = 0;
     ordered_clauses.Sort(ClauseMapping::HitCountOrder);
     for (int i = 0; i < clause_count; ++i) {
       int hits = ordered_clauses.at(i)->clause()->hit_count();
       if (i < kClauseReorderSoftLimit) {
-        above_counter += hits;
+        above_weight += hits;
       } else {
-        below_counter += hits;
+        below_weight += hits;
       }
     }
-    counter_ratio = below_counter == 0 ? 1 : 1 + above_counter / below_counter;
-    counter = AddDeoptCounter();
+
+    // XXX: Use common denominator
+    int initial = (above_weight + 1) * (below_weight + 1);
+    if (Smi::IsValid(initial * 2)) {
+      counter = AddDeoptCounter(initial, initial * 2);
+    }
   }
 
   // 1. Build all the tests, with dangling true branches
@@ -5042,11 +5054,12 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     HControlInstruction* compare;
 
     // Deoptimize when balance shifts from top clauses
-    if (reorder_clauses) {
+    if (counter != NULL) {
       if (i == 0 || i == kClauseReorderSoftLimit) {
-        int delta = i == 0 ? counter_ratio : -(counter_ratio + 1);
-        AddInstruction(new(zone()) HDeoptCounterAdd(counter, delta));
-        AddSimulate(clause->EntryId());
+        int delta = i == 0 ? below_weight : -(below_weight + above_weight);
+        if (delta != 0) {
+          AddInstruction(new(zone()) HDeoptCounterAdd(counter, delta));
+        }
       }
     }
 

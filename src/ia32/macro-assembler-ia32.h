@@ -531,6 +531,9 @@ class MacroAssembler: public Assembler {
   // Abort execution if argument is not a smi, enabled via --debug-code.
   void AssertSmi(Register object);
 
+  // Abort execution if argument is not a smi, enabled via --debug-code.
+  void AssertSmi(Operand object);
+
   // Abort execution if argument is a smi, enabled via --debug-code.
   void AssertNotSmi(Register object);
 

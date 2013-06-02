@@ -1522,7 +1522,13 @@ class HDeoptimize: public HControlInstruction {
 
 class HDeoptCounter: public HTemplateInstruction<0> {
  public:
-  explicit HDeoptCounter(int id) : id_(id) {
+  HDeoptCounter(int id, int initial_value, int max_value)
+      : id_(id),
+        initial_value_(initial_value),
+        max_value_(max_value) {
+    ASSERT(initial_value_ <= max_value_);
+    ASSERT(Smi::IsValid(initial_value_));
+    ASSERT(Smi::IsValid(max_value_));
   }
 
   virtual Representation RequiredInputRepresentation(int index) {
@@ -1532,13 +1538,15 @@ class HDeoptCounter: public HTemplateInstruction<0> {
   virtual void PrintDataTo(StringStream* stream);
 
   inline int id() const { return id_; }
+  inline int initial_value() const { return initial_value_; }
+  inline int max_value() const { return max_value_; }
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounter)
 
-  static const int kInitialValue = 128;
-
  private:
   int id_;
+  int initial_value_;
+  int max_value_;
 };
 
 
@@ -1547,7 +1555,6 @@ class HDeoptCounterAdd: public HTemplateInstruction<0> {
   explicit HDeoptCounterAdd(HDeoptCounter* counter, int delta)
       : counter_(counter),
         delta_(delta) {
-    SetAllSideEffects();
   }
 
   virtual Representation RequiredInputRepresentation(int index) {

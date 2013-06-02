@@ -1079,7 +1079,6 @@ CaseClause::CaseClause(Isolate* isolate,
       hit_count_(0),
       compare_id_(AstNode::GetNextId(isolate)),
       counter_id_(AstNode::GetNextId(isolate)),
-      pre_entry_id_(AstNode::GetNextId(isolate)),
       entry_id_(AstNode::GetNextId(isolate)) {
 }
 

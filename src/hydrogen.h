@@ -1422,7 +1422,7 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
   bool inline_bailout() { return inline_bailout_; }
 
   void AddSoftDeoptimize();
-  HDeoptCounter* AddDeoptCounter();
+  HDeoptCounter* AddDeoptCounter(int initial_value, int max_value);
 
   void Bailout(const char* reason);
 

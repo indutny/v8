@@ -423,15 +423,22 @@ class LDummyUse: public LTemplateInstruction<1, 1, 0> {
 
 class LDeoptCounter: public LTemplateInstruction<0, 0, 0> {
  public:
-  explicit LDeoptCounter(int id) : id_(id) {
+  LDeoptCounter(int id, int initial_value, int max_value)
+      : id_(id),
+        initial_value_(initial_value),
+        max_value_(max_value) {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(DeoptCounter, "deopt_counter")
 
   int id() const { return id_; }
+  int initial_value() const { return initial_value_; }
+  int max_value() const { return max_value_; }
 
  private:
   int id_;
+  int initial_value_;
+  int max_value_;
 };
 
 

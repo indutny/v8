@@ -1029,6 +1029,7 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
       Operand counter = FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset);
 
       __ LoadHeapObject(ebx, cell);
+      __ AssertSmi(counter);
       __ add(counter, Immediate(Smi::FromInt(1)));
       __ j(no_overflow, &ok, Label::kNear);
 

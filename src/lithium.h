@@ -625,15 +625,20 @@ class LEnvironment: public ZoneObject {
 
 class LDeoptCounterCell: public ZoneObject {
  public:
-  LDeoptCounterCell(int id, Handle<JSGlobalPropertyCell> cell) : id_(id),
-                                                                 cell_(cell) {
+  LDeoptCounterCell(int id,
+                    int max_value,
+                    Handle<JSGlobalPropertyCell> cell) : id_(id),
+                                                         max_value_(max_value),
+                                                         cell_(cell) {
   }
 
   int id() { return id_; }
+  int max_value() { return max_value_; }
   Handle<JSGlobalPropertyCell> cell() { return cell_; }
 
  private:
   int id_;
+  int max_value_;
   Handle<JSGlobalPropertyCell> cell_;
 };
 

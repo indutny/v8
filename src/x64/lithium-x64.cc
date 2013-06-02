@@ -712,7 +712,9 @@ LInstruction* LChunkBuilder::DoSoftDeoptimize(HSoftDeoptimize* instr) {
 
 
 LInstruction* LChunkBuilder::DoDeoptCounter(HDeoptCounter* instr) {
-  return AssignEnvironment(new(zone()) LDeoptCounter(instr->id()));
+  return AssignEnvironment(new(zone()) LDeoptCounter(instr->id(),
+                                                     instr->initial_value(),
+                                                     instr->max_value()));
 }
 
 
