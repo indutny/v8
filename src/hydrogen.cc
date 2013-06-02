@@ -5011,21 +5011,46 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
       max_hit == 0 ? false : ((100 * min_hit / max_hit) < kClauseMinDeltaHit);
 
   HDeoptCounter* counter = NULL;
-  int above_weight = 0;
-  int below_weight = 0;
+
+  // If hit distribution doesn't change much - counter should always stay
+  // below zero. We can accomplish this by finding two optimal weights: one
+  // added to counter when matching clause above soft mark, and one substracted
+  // from counter when reaching clauses below soft mark.
+  //
+  // Calculate this weights.
+  int above_weight = 1;
+  int below_weight = 1;
   if (reorder_clauses) {
     ordered_clauses.Sort(ClauseMapping::HitCountOrder);
+
+    double above = 1;
+    double below = 1;
     for (int i = 0; i < clause_count; ++i) {
-      int hits = ordered_clauses.at(i)->clause()->hit_count();
+      double hits =
+          static_cast<double>(ordered_clauses.at(i)->clause()->hit_count());
       if (i < kClauseReorderSoftLimit) {
-        above_weight += hits;
+        above += hits;
       } else {
-        below_weight += hits;
+        below += hits;
       }
     }
 
-    // XXX: Use common denominator
-    int initial = (above_weight + 1) * (below_weight + 1);
+    if (below > above) {
+      above = (100 * above) / below;
+      below = 100;
+    } else {
+      below = (100 * below) / above;
+      above = 100;
+    }
+
+    above_weight = static_cast<int>(floor(above));
+    below_weight = static_cast<int>(ceil(below));
+
+    if (above_weight == below_weight) {
+      below_weight++;
+    }
+
+    int initial = above_weight * below_weight;
     if (Smi::IsValid(initial * 2)) {
       counter = AddDeoptCounter(initial, initial * 2);
     }
@@ -5053,7 +5078,7 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
 
     HControlInstruction* compare;
 
-    // Deoptimize when balance shifts from top clauses
+    // Deoptimize when balance shifts from top clauses to bottom ones
     if (counter != NULL) {
       if (i == 0 || i == kClauseReorderSoftLimit) {
         int delta = i == 0 ? below_weight : -(below_weight + above_weight);
