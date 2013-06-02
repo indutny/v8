@@ -5509,6 +5509,7 @@ void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
 
     Handle<JSGlobalPropertyCell> cell = deopt_cell->cell();
     Register scratch = ToRegister(instr->temp());
+    Register scratch2 = ToRegister(instr->temp2());
 
     // Increment counter
     Label ok;
@@ -5517,17 +5518,19 @@ void LCodeGen::DoDeoptCounterAdd(LDeoptCounterAdd* instr) {
 
     ASSERT(instr->delta() != 0);
     __ LoadHeapObject(scratch, cell);
-    __ AssertSmi(counter);
-    __ SmiAddConstant(counter, Smi::FromInt(instr->delta()));
-    __ SmiCompare(counter, Smi::FromInt(deopt_cell->max_value()));
+    __ movq(scratch2, counter);
+    __ AssertSmi(scratch2);
+    __ SmiAddConstant(scratch2, scratch2, Smi::FromInt(instr->delta()));
+    __ SmiCompare(scratch2, Smi::FromInt(deopt_cell->max_value()));
     __ j(less_equal, &ok, Label::kNear);
 
     // Limit counter
-    __ Move(counter, Smi::FromInt(deopt_cell->max_value()));
+    __ Move(scratch2, Smi::FromInt(deopt_cell->max_value()));
     __ bind(&ok);
+    __ movq(counter, scratch2);
 
     // And deoptimize on negative value
-    __ SmiCompare(counter, Smi::FromInt(0));
+    __ SmiCompare(scratch2, Smi::FromInt(0));
     DeoptimizeIf(less_equal, instr->environment(), Deoptimizer::SOFT);
     return;
   }
