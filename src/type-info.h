@@ -343,6 +343,7 @@ class TypeFeedbackOracle: public ZoneObject {
   Handle<Object> GetInfo(TypeFeedbackId ast_id);
 
  private:
+  Handle<Code> code_;
   Handle<Context> native_context_;
   Isolate* isolate_;
   Zone* zone_;

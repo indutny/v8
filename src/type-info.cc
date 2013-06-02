@@ -63,7 +63,8 @@ TypeFeedbackOracle::TypeFeedbackOracle(Handle<Code> code,
                                        Handle<Context> native_context,
                                        Isolate* isolate,
                                        Zone* zone)
-    : native_context_(native_context),
+    : code_(code),
+      native_context_(native_context),
       isolate_(isolate),
       zone_(zone) {
   BuildDictionary(code);
@@ -494,7 +495,25 @@ int TypeFeedbackOracle::SwitchHitCount(CaseClause* clause) {
   Handle<Object> object = GetInfo(clause->CounterId());
   if (!object->IsSmi()) return 0;
 
-  return Smi::cast(*object)->value();
+  int ret = Smi::cast(*object)->value();
+  if (ret == 0) return ret;
+
+  // Reset counter after observing it
+  // XXX: O(n) for each hit counter
+  Object* raw_info = code_->type_feedback_info();
+  if (raw_info->IsTypeFeedbackInfo()) {
+    Handle<TypeFeedbackCells> cache(
+        TypeFeedbackInfo::cast(raw_info)->type_feedback_cells());
+    for (int i = 0; i < cache->CellCount(); i++) {
+      TypeFeedbackId ast_id = cache->AstId(i);
+      if (ast_id.ToInt() != clause->CounterId().ToInt()) continue;
+
+      *reinterpret_cast<Smi**>(cache->Cell(i)->ValueAddress()) =
+          Smi::FromInt(0);
+    }
+  }
+
+  return ret;
 }
 
 

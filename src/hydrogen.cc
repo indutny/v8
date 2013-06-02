@@ -4983,7 +4983,6 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
   bool reorder_clauses = false;
   for (int i = 0; i < clause_count; ++i) {
     if (clauses->at(i)->hit_count() > 0) {
-      fprintf(stdout, "%d %d\n", i, clauses->at(i)->hit_count());
       reorder_clauses = true;
     }
     ordered_clauses.Add(new(zone()) ClauseMapping(i, clauses->at(i)), zone());
@@ -5017,8 +5016,7 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
     HControlInstruction* compare;
 
     // Deoptimize on reaching far clauses
-    if (reorder_clauses &&
-        (i >= kClauseReorderSoftLimit || clause->hit_count() == 0)) {
+    if (reorder_clauses && i >= kClauseReorderSoftLimit) {
       AddSoftDeoptimize();
     }
 
