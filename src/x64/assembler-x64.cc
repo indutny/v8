@@ -625,6 +625,17 @@ void Assembler::shift(Register dst, int subcode, int size) {
 }
 
 
+void Assembler::bt(Register dst, Immediate bit) {
+  EnsureSpace ensure_space(this);
+  DCHECK(is_int8(bit.value_) || is_uint8(bit.value_));
+  emit_rex_64(dst);
+  emit(0x0F);
+  emit(0xBA);
+  emit_modrm(0x04, dst);
+  emit(bit.value_);
+}
+
+
 void Assembler::bt(const Operand& dst, Register src) {
   EnsureSpace ensure_space(this);
   emit_rex_64(src, dst);

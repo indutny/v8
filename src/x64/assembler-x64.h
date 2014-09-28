@@ -859,6 +859,7 @@ class Assembler : public AssemblerBase {
   void testb(const Operand& op, Register reg);
 
   // Bit operations.
+  void bt(Register dst, Immediate bit);
   void bt(const Operand& dst, Register src);
   void bts(const Operand& dst, Register src);
   void bsrl(Register dst, Register src);

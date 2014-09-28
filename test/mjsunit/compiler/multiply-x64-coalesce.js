@@ -54,14 +54,18 @@ function MulX64(a, b) {
 
 MulX64(1, 2);
 MulX64(0xffff, 0xdead);
-%OptimizeFunctionOnNextCall(MulX64);
 
 var values = [
   [ 1, 2 ],
   [ 0xffff, 0xdead ],
-  [ 0x3ffffff, 0x3ffffff ]
+  [ 0x3ffffff, 0x3ffffff ],
+
+  // Will deoptimize
+  [ -1, 2 ],
+  [ 0xfffffff, 0xfffffff ]
 ]
 
 values.forEach(function(pair) {
+  %OptimizeFunctionOnNextCall(MulX64);
   assertEquals(RefMul(pair[0], pair[1]), MulX64(pair[0], pair[1]));
 });

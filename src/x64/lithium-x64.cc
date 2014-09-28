@@ -1514,7 +1514,14 @@ LInstruction* LChunkBuilder::DoMul(HMul* instr) {
     DCHECK(instr->left()->representation().Equals(instr->representation()));
     DCHECK(instr->right()->representation().Equals(instr->representation()));
     LOperand* left = UseRegisterAtStart(instr->BetterLeftOperand());
-    LOperand* right = UseOrConstant(instr->BetterRightOperand());
+    LOperand* right;
+
+    // NOTE: We need right value in register to perform sign extension
+    if (instr->CheckFlag(HValue::kUint64Output)) {
+      right = UseRegisterOrConstant(instr->BetterRightOperand());
+    } else {
+      right = UseOrConstant(instr->BetterRightOperand());
+    }
     LMulI* mul = new(zone()) LMulI(left, right);
     if (instr->CheckFlag(HValue::kCanOverflow) ||
         instr->CheckFlag(HValue::kBailoutOnMinusZero)) {

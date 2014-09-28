@@ -1407,6 +1407,10 @@ void LCodeGen::DoMulI(LMulI* instr) {
   LOperand* right = instr->right();
   bool x64 = instr->hydrogen()->CheckFlag(HValue::kUint64Output);
 
+  // Sign-extend left value
+  if (x64)
+    __ movsxlq(left, left);
+
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     if (instr->hydrogen_value()->representation().IsSmi()) {
       __ movp(kScratchRegister, left);
@@ -1489,32 +1493,33 @@ void LCodeGen::DoMulI(LMulI* instr) {
         __ imull(left, left, Immediate(right_value));
     }
   } else if (right->IsStackSlot()) {
+    DCHECK(!x64);
     if (instr->hydrogen_value()->representation().IsSmi()) {
       __ SmiToInteger64(left, left);
       __ imulp(left, ToOperand(right));
     } else {
-      if (x64)
-        __ imulq(left, ToOperand(right));
-      else
-        __ imull(left, ToOperand(right));
+      __ imull(left, ToOperand(right));
     }
   } else {
     if (instr->hydrogen_value()->representation().IsSmi()) {
+      DCHECK(!x64);
       __ SmiToInteger64(left, left);
       __ imulp(left, ToRegister(right));
     } else {
-      if (x64)
+      if (x64) {
+        // Sign-extend right value
+        __ movsxlq(ToRegister(right), ToRegister(right));
         __ imulq(left, ToRegister(right));
-      else
+      } else {
         __ imull(left, ToRegister(right));
+      }
     }
   }
 
   if (x64) {
     // we can't really do > 26bit multiplication without precision loss
-    __ movq(kScratchRegister, left);
-    __ shrq(kScratchRegister, Immediate(52));
-    DeoptimizeIf(not_zero, instr, "precision loss");
+    __ bt(left, Immediate(52));
+    DeoptimizeIf(carry, instr, "precision loss emulation");
   } else if (can_overflow) {
     DeoptimizeIf(overflow, instr, "overflow");
   }

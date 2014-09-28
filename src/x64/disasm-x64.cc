@@ -1234,6 +1234,13 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
     // CPUID
     AppendToBuffer("%s", mnemonic);
 
+  } else if (opcode == 0xBA) {
+    // BT REG, imm
+    int mod, regop, rm;
+    get_modrm(*current, &mod, &regop, &rm);
+    current++;
+    AppendToBuffer("%s %s, %d", mnemonic, NameOfCPURegister(regop), *current);
+    current++;
   } else if ((opcode & 0xF0) == 0x40) {
     // CMOVcc: conditional move.
     int condition = opcode & 0x0F;
@@ -1284,8 +1291,8 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
     // Jcc: Conditional jump (branch).
     current = data + JumpConditional(data);
 
-  } else if (opcode == 0xBE || opcode == 0xBF || opcode == 0xB6 ||
-             opcode == 0xB7 || opcode == 0xAF) {
+  } else if (opcode == 0xBA || opcode == 0xBE || opcode == 0xBF ||
+             opcode == 0xB6 || opcode == 0xB7 || opcode == 0xAF) {
     // Size-extending moves, IMUL.
     current += PrintOperands(mnemonic, REG_OPER_OP_ORDER, current);
 
@@ -1340,6 +1347,8 @@ const char* DisassemblerX64::TwoByteMnemonic(byte opcode) {
       return "divsd";
     case 0xA2:
       return "cpuid";
+    case 0xA3:
+      return "bt";
     case 0xA5:
       return "shld";
     case 0xAB:
@@ -1348,6 +1357,8 @@ const char* DisassemblerX64::TwoByteMnemonic(byte opcode) {
       return "shrd";
     case 0xAF:
       return "imul";
+    case 0xBA:
+      return "bt";
     case 0xB6:
       return "movzxb";
     case 0xB7:
