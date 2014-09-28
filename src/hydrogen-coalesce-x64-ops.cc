@@ -63,13 +63,21 @@ void HCoalesceX64Operations::CoalesceMuls(HInstruction* instr) {
 
 
 void HCoalesceX64Operations::Run() {
+  Handle<SharedFunctionInfo> shared = graph()->info()->shared_info();
+  if (shared.is_null())
+    return;
+
+  if (shared->deopt_count() > 2) {
+    if (FLAG_trace_opt) {
+      PrintF("[disabled x64 coalesce for %s, because of often deopts]\n",
+             shared->DebugName()->ToCString().get());
+    }
+    return;
+  }
+
   const ZoneList<HBasicBlock*>* blocks(graph()->blocks());
   for (int i = 0; i < blocks->length(); ++i) {
-    // Process phi instructions first.
     const HBasicBlock* block(blocks->at(i));
-    const ZoneList<HPhi*>* phis = block->phis();
-    for (int j = 0; j < phis->length(); j++) {
-    }
 
     // Process normal instructions.
     for (HInstruction* current = block->first(); current != NULL; ) {

@@ -62,7 +62,17 @@ var values = [
 
   // Will deoptimize
   [ -1, 2 ],
-  [ 0xfffffff, 0xfffffff ]
+  [ 0xfffffff, 0xfffffff ],
+
+  // Just to disable coalesce
+  [ -1, 2 ],
+  [ -1, 2 ],
+  [ -1, 2 ],
+  [ -1, 2 ],
+  [ -1, 2 ],
+
+  // Normal
+  [ 0xabba, 0xdead ]
 ]
 
 values.forEach(function(pair) {
