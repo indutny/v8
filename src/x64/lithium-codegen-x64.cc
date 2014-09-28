@@ -1494,15 +1494,13 @@ void LCodeGen::DoMulI(LMulI* instr) {
     }
   }
 
-  if (can_overflow) {
-    if (x64) {
-      // we can't really do > 26bit multiplication without precision loss
-      __ movq(kScratchRegister, left);
-      __ shrq(kScratchRegister, Immediate(52));
-      DeoptimizeIf(not_zero, instr, "precision loss");
-    } else {
-      DeoptimizeIf(overflow, instr, "overflow");
-    }
+  if (x64) {
+    // we can't really do > 26bit multiplication without precision loss
+    __ movq(kScratchRegister, left);
+    __ shrq(kScratchRegister, Immediate(52));
+    DeoptimizeIf(not_zero, instr, "precision loss");
+  } else if (can_overflow) {
+    DeoptimizeIf(overflow, instr, "overflow");
   }
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
