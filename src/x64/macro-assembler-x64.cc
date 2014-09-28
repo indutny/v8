@@ -5322,20 +5322,35 @@ void MacroAssembler::JumpIfDictionaryInPrototypeChain(
 }
 
 
-void MacroAssembler::TruncatingDiv(Register dividend, int32_t divisor) {
+void MacroAssembler::TruncatingDiv(Register dividend,
+                                   int32_t divisor,
+                                   bool x64) {
   DCHECK(!dividend.is(rax));
   DCHECK(!dividend.is(rdx));
   base::MagicNumbersForDivision<uint32_t> mag =
       base::SignedDivisionByConstant(static_cast<uint32_t>(divisor));
   movl(rax, Immediate(mag.multiplier));
-  imull(dividend);
+
   bool neg = (mag.multiplier & (static_cast<uint32_t>(1) << 31)) != 0;
-  if (divisor > 0 && neg) addl(rdx, dividend);
-  if (divisor < 0 && !neg && mag.multiplier > 0) subl(rdx, dividend);
-  if (mag.shift > 0) sarl(rdx, Immediate(mag.shift));
-  movl(rax, dividend);
-  shrl(rax, Immediate(31));
-  addl(rdx, rax);
+
+  if (x64) {
+    imull(dividend);
+    if (divisor > 0 && neg) addq(rdx, dividend);
+    if (divisor < 0 && !neg && mag.multiplier > 0) subq(rdx, dividend);
+    if (mag.shift > 0) sarq(rdx, Immediate(mag.shift));
+    movq(rax, dividend);
+    shrq(rax, Immediate(31));
+    addq(rdx, rax);
+  } else {
+    imulq(dividend);
+    bool neg = (mag.multiplier & (static_cast<uint32_t>(1) << 31)) != 0;
+    if (divisor > 0 && neg) addl(rdx, dividend);
+    if (divisor < 0 && !neg && mag.multiplier > 0) subl(rdx, dividend);
+    if (mag.shift > 0) sarl(rdx, Immediate(mag.shift));
+    movl(rax, dividend);
+    shrl(rax, Immediate(31));
+    addl(rdx, rax);
+  }
 }
 
 

@@ -1397,7 +1397,7 @@ class MacroAssembler: public Assembler {
 
   // Emit code for a truncating division by a constant. The dividend register is
   // unchanged, the result is in rdx, and rax gets clobbered.
-  void TruncatingDiv(Register dividend, int32_t divisor);
+  void TruncatingDiv(Register dividend, int32_t divisor, bool x64);
 
   // ---------------------------------------------------------------------------
   // StatsCounter support

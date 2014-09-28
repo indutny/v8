@@ -1054,7 +1054,7 @@ void LCodeGen::DoModByConstI(LModByConstI* instr) {
     return;
   }
 
-  __ TruncatingDiv(dividend, Abs(divisor));
+  __ TruncatingDiv(dividend, Abs(divisor), false);
   __ imull(rdx, rdx, Immediate(Abs(divisor)));
   __ movl(rax, dividend);
   __ subl(rax, rdx);
@@ -1192,7 +1192,7 @@ void LCodeGen::DoFlooringDivByConstI(LFlooringDivByConstI* instr) {
   // division is the same as the truncating division.
   if ((divisor > 0 && !hdiv->CheckFlag(HValue::kLeftCanBeNegative)) ||
       (divisor < 0 && !hdiv->CheckFlag(HValue::kLeftCanBePositive))) {
-    __ TruncatingDiv(dividend, Abs(divisor));
+    __ TruncatingDiv(dividend, Abs(divisor), false);
     if (divisor < 0) __ negl(rdx);
     return;
   }
@@ -1204,12 +1204,12 @@ void LCodeGen::DoFlooringDivByConstI(LFlooringDivByConstI* instr) {
   Label needs_adjustment, done;
   __ cmpl(dividend, Immediate(0));
   __ j(divisor > 0 ? less : greater, &needs_adjustment, Label::kNear);
-  __ TruncatingDiv(dividend, Abs(divisor));
+  __ TruncatingDiv(dividend, Abs(divisor), false);
   if (divisor < 0) __ negl(rdx);
   __ jmp(&done, Label::kNear);
   __ bind(&needs_adjustment);
   __ leal(temp, Operand(dividend, divisor > 0 ? 1 : -1));
-  __ TruncatingDiv(temp, Abs(divisor));
+  __ TruncatingDiv(temp, Abs(divisor), false);
   if (divisor < 0) __ negl(rdx);
   __ decl(rdx);
   __ bind(&done);
@@ -1276,14 +1276,20 @@ void LCodeGen::DoDivByPowerOf2I(LDivByPowerOf2I* instr) {
   DCHECK(divisor == kMinInt || base::bits::IsPowerOfTwo32(Abs(divisor)));
   DCHECK(!result.is(dividend));
 
+  bool x64 = instr->hydrogen()->left()->CheckFlag(HValue::kUint64Output);
+
   // Check for (0 / -x) that will produce negative zero.
   HDiv* hdiv = instr->hydrogen();
   if (hdiv->CheckFlag(HValue::kBailoutOnMinusZero) && divisor < 0) {
-    __ testl(dividend, dividend);
+    if (x64)
+      __ testq(dividend, dividend);
+    else
+      __ testl(dividend, dividend);
     DeoptimizeIf(zero, instr, "minus zero");
   }
   // Check for (kMinInt / -1).
   if (hdiv->CheckFlag(HValue::kCanOverflow) && divisor == -1) {
+    DCHECK(!x64);
     __ cmpl(dividend, Immediate(kMinInt));
     DeoptimizeIf(zero, instr, "overflow");
   }
@@ -1298,10 +1304,18 @@ void LCodeGen::DoDivByPowerOf2I(LDivByPowerOf2I* instr) {
   int32_t shift = WhichPowerOf2Abs(divisor);
   if (shift > 0) {
     // The arithmetic shift is always OK, the 'if' is an optimization only.
-    if (shift > 1) __ sarl(result, Immediate(31));
-    __ shrl(result, Immediate(32 - shift));
-    __ addl(result, dividend);
-    __ sarl(result, Immediate(shift));
+    if (x64) {
+      if (shift > 1) __ sarq(result, Immediate(31));
+      __ shrq(result, Immediate(32 - shift));
+      __ addq(result, dividend);
+      __ sarq(result, Immediate(shift));
+      __ movl(result, result);
+    } else {
+      if (shift > 1) __ sarl(result, Immediate(31));
+      __ shrl(result, Immediate(32 - shift));
+      __ addl(result, dividend);
+      __ sarl(result, Immediate(shift));
+    }
   }
   if (divisor < 0) __ negl(result);
 }
@@ -1312,6 +1326,8 @@ void LCodeGen::DoDivByConstI(LDivByConstI* instr) {
   int32_t divisor = instr->divisor();
   DCHECK(ToRegister(instr->result()).is(rdx));
 
+  bool x64 = instr->hydrogen()->left()->CheckFlag(HValue::kUint64Output);
+
   if (divisor == 0) {
     DeoptimizeIf(no_condition, instr, "division by zero");
     return;
@@ -1320,11 +1336,14 @@ void LCodeGen::DoDivByConstI(LDivByConstI* instr) {
   // Check for (0 / -x) that will produce negative zero.
   HDiv* hdiv = instr->hydrogen();
   if (hdiv->CheckFlag(HValue::kBailoutOnMinusZero) && divisor < 0) {
-    __ testl(dividend, dividend);
+    if (x64)
+      __ testq(dividend, dividend);
+    else
+      __ testl(dividend, dividend);
     DeoptimizeIf(zero, instr, "minus zero");
   }
 
-  __ TruncatingDiv(dividend, Abs(divisor));
+  __ TruncatingDiv(dividend, Abs(divisor), x64);
   if (divisor < 0) __ negl(rdx);
 
   if (!hdiv->CheckFlag(HInstruction::kAllUsesTruncatingToInt32)) {
@@ -1637,18 +1656,30 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
   LOperand* right = instr->right();
   DCHECK(left->Equals(instr->result()));
   DCHECK(left->IsRegister());
+
+  bool x64 = instr->hydrogen()->left()->CheckFlag(HValue::kUint64Output);
+
   if (right->IsRegister()) {
     DCHECK(ToRegister(right).is(rcx));
 
     switch (instr->op()) {
       case Token::ROR:
-        __ rorl_cl(ToRegister(left));
+        if (x64)
+          __ rorq_cl(ToRegister(left));
+        else
+          __ rorl_cl(ToRegister(left));
         break;
       case Token::SAR:
-        __ sarl_cl(ToRegister(left));
+        if (x64)
+          __ sarq_cl(ToRegister(left));
+        else
+          __ sarl_cl(ToRegister(left));
         break;
       case Token::SHR:
-        __ shrl_cl(ToRegister(left));
+        if (x64)
+          __ shrq_cl(ToRegister(left));
+        else
+          __ shrl_cl(ToRegister(left));
         if (instr->can_deopt()) {
           __ testl(ToRegister(left), ToRegister(left));
           DeoptimizeIf(negative, instr, "negative value");
@@ -1667,12 +1698,18 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
     switch (instr->op()) {
       case Token::ROR:
         if (shift_count != 0) {
-          __ rorl(ToRegister(left), Immediate(shift_count));
+          if (x64)
+            __ rorq(ToRegister(left), Immediate(shift_count));
+          else
+            __ rorl(ToRegister(left), Immediate(shift_count));
         }
         break;
       case Token::SAR:
         if (shift_count != 0) {
-          __ sarl(ToRegister(left), Immediate(shift_count));
+          if (x64)
+            __ sarq(ToRegister(left), Immediate(shift_count));
+          else
+            __ sarl(ToRegister(left), Immediate(shift_count));
         }
         break;
       case Token::SHR:
@@ -1710,6 +1747,10 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
         break;
     }
   }
+
+  // Discard high bits
+  if (x64)
+    __ movl(ToRegister(left), ToRegister(left));
 }
 
 

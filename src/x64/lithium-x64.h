@@ -1288,6 +1288,7 @@ class LShiftI FINAL : public LTemplateInstruction<1, 2, 0> {
   bool can_deopt() const { return can_deopt_; }
 
   DECLARE_CONCRETE_INSTRUCTION(ShiftI, "shift-i")
+  DECLARE_HYDROGEN_ACCESSOR(BitwiseBinaryOperation)
 
  private:
   Token::Value op_;
