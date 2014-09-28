@@ -1303,14 +1303,11 @@ void LCodeGen::DoDivByPowerOf2I(LDivByPowerOf2I* instr) {
   __ Move(result, dividend);
   int32_t shift = WhichPowerOf2Abs(divisor);
   if (shift > 0) {
-    // The arithmetic shift is always OK, the 'if' is an optimization only.
     if (x64) {
-      if (shift > 1) __ sarq(result, Immediate(31));
-      __ shrq(result, Immediate(32 - shift));
-      __ addq(result, dividend);
       __ sarq(result, Immediate(shift));
       __ movl(result, result);
     } else {
+      // The arithmetic shift is always OK, the 'if' is an optimization only.
       if (shift > 1) __ sarl(result, Immediate(31));
       __ shrl(result, Immediate(32 - shift));
       __ addl(result, dividend);
