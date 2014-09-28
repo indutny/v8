@@ -64,6 +64,7 @@ class Representation {
     kUInteger16,
     kSmi,
     kInteger32,
+    kInteger64,
     kDouble,
     kHeapObject,
     kTagged,
@@ -81,6 +82,7 @@ class Representation {
   static Representation UInteger16() { return Representation(kUInteger16); }
   static Representation Smi() { return Representation(kSmi); }
   static Representation Integer32() { return Representation(kInteger32); }
+  static Representation Integer64() { return Representation(kInteger64); }
   static Representation Double() { return Representation(kDouble); }
   static Representation HeapObject() { return Representation(kHeapObject); }
   static Representation External() { return Representation(kExternal); }
@@ -136,6 +138,9 @@ class Representation {
     if (IsInteger32()) {
       return sizeof(uint32_t);
     }
+    if (IsInteger64()) {
+      return sizeof(uint64_t);
+    }
     return kPointerSize;
   }
 
@@ -149,6 +154,7 @@ class Representation {
   bool IsSmi() const { return kind_ == kSmi; }
   bool IsSmiOrTagged() const { return IsSmi() || IsTagged(); }
   bool IsInteger32() const { return kind_ == kInteger32; }
+  bool IsInteger64() const { return kind_ == kInteger64; }
   bool IsSmiOrInteger32() const { return IsSmi() || IsInteger32(); }
   bool IsDouble() const { return kind_ == kDouble; }
   bool IsHeapObject() const { return kind_ == kHeapObject; }
@@ -156,7 +162,7 @@ class Representation {
   bool IsSpecialization() const {
     return IsInteger8() || IsUInteger8() ||
       IsInteger16() || IsUInteger16() ||
-      IsSmi() || IsInteger32() || IsDouble();
+      IsSmi() || IsInteger32() || IsInteger64() || IsDouble();
   }
   const char* Mnemonic() const;
 

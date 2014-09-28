@@ -15,6 +15,9 @@
 #include "src/hydrogen-bce.h"
 #include "src/hydrogen-bch.h"
 #include "src/hydrogen-canonicalize.h"
+#if V8_TARGET_ARCH_X64
+#include "src/hydrogen-coalesce-x64-ops.h"
+#endif  // V8_TARGET_ARCH_X64
 #include "src/hydrogen-check-elimination.h"
 #include "src/hydrogen-dce.h"
 #include "src/hydrogen-dehoist.h"
@@ -4377,6 +4380,11 @@ bool HGraph::Optimize(BailoutReason* bailout_reason) {
   Run<HMergeRemovableSimulatesPhase>();
 
   Run<HMarkDeoptimizeOnUndefinedPhase>();
+
+#if V8_TARGET_ARCH_X64
+  Run<HCoalesceX64Operations>();
+#endif  // V8_TARGET_ARCH_X64
+
   Run<HRepresentationChangesPhase>();
 
   Run<HInferTypesPhase>();

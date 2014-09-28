@@ -515,6 +515,8 @@ class HValue : public ZoneObject {
     // Indicates the instruction is live during dead code elimination.
     kIsLive,
 
+    kUint64Output,
+
     // HEnvironmentMarkers are deleted before dead code
     // elimination takes place, so they can repurpose the kIsLive flag:
     kEndsLiveRange = kIsLive,

@@ -1063,6 +1063,8 @@
         }],
         ['v8_target_arch=="x64" or v8_target_arch=="x32"', {
           'sources': [  ### gcmole(arch:x64) ###
+            '../../src/hydrogen-coalesce-x64-ops.cc',
+            '../../src/hydrogen-coalesce-x64-ops.h',
             '../../src/x64/assembler-x64-inl.h',
             '../../src/x64/assembler-x64.cc',
             '../../src/x64/assembler-x64.h',

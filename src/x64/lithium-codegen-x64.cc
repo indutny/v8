@@ -1389,6 +1389,7 @@ void LCodeGen::DoDivI(LDivI* instr) {
 void LCodeGen::DoMulI(LMulI* instr) {
   Register left = ToRegister(instr->left());
   LOperand* right = instr->right();
+  bool x64 = instr->hydrogen()->CheckFlag(HValue::kUint64Output);
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     if (instr->hydrogen_value()->representation().IsSmi()) {
@@ -1403,11 +1404,17 @@ void LCodeGen::DoMulI(LMulI* instr) {
   if (right->IsConstantOperand()) {
     int32_t right_value = ToInteger32(LConstantOperand::cast(right));
     if (right_value == -1) {
-      __ negl(left);
+      if (x64)
+        __ negq(left);
+      else
+        __ negl(left);
     } else if (right_value == 0) {
       __ xorl(left, left);
     } else if (right_value == 2) {
-      __ addl(left, left);
+      if (x64)
+        __ addq(left, left);
+      else
+        __ addl(left, left);
     } else if (!can_overflow) {
       // If the multiplication is known to not overflow, we
       // can use operations that don't set the overflow flag
@@ -1417,48 +1424,85 @@ void LCodeGen::DoMulI(LMulI* instr) {
           // Do nothing.
           break;
         case 3:
-          __ leal(left, Operand(left, left, times_2, 0));
+          if (x64)
+            __ leaq(left, Operand(left, left, times_2, 0));
+          else
+            __ leal(left, Operand(left, left, times_2, 0));
           break;
         case 4:
-          __ shll(left, Immediate(2));
+          if (x64)
+            __ shlq(left, Immediate(2));
+          else
+            __ shll(left, Immediate(2));
           break;
         case 5:
-          __ leal(left, Operand(left, left, times_4, 0));
+          if (x64)
+            __ leaq(left, Operand(left, left, times_4, 0));
+          else
+            __ leal(left, Operand(left, left, times_4, 0));
           break;
         case 8:
-          __ shll(left, Immediate(3));
+          if (x64)
+            __ shlq(left, Immediate(3));
+          else
+            __ shll(left, Immediate(3));
           break;
         case 9:
-          __ leal(left, Operand(left, left, times_8, 0));
+          if (x64)
+            __ leaq(left, Operand(left, left, times_8, 0));
+          else
+            __ leal(left, Operand(left, left, times_8, 0));
           break;
         case 16:
-          __ shll(left, Immediate(4));
+          if (x64)
+            __ shlq(left, Immediate(4));
+          else
+            __ shll(left, Immediate(4));
           break;
         default:
-          __ imull(left, left, Immediate(right_value));
+          if (x64)
+            __ imulq(left, left, Immediate(right_value));
+          else
+            __ imull(left, left, Immediate(right_value));
           break;
       }
     } else {
-      __ imull(left, left, Immediate(right_value));
+      if (x64)
+        __ imulq(left, left, Immediate(right_value));
+      else
+        __ imull(left, left, Immediate(right_value));
     }
   } else if (right->IsStackSlot()) {
     if (instr->hydrogen_value()->representation().IsSmi()) {
       __ SmiToInteger64(left, left);
       __ imulp(left, ToOperand(right));
     } else {
-      __ imull(left, ToOperand(right));
+      if (x64)
+        __ imulq(left, ToOperand(right));
+      else
+        __ imull(left, ToOperand(right));
     }
   } else {
     if (instr->hydrogen_value()->representation().IsSmi()) {
       __ SmiToInteger64(left, left);
       __ imulp(left, ToRegister(right));
     } else {
-      __ imull(left, ToRegister(right));
+      if (x64)
+        __ imulq(left, ToRegister(right));
+      else
+        __ imull(left, ToRegister(right));
     }
   }
 
   if (can_overflow) {
-    DeoptimizeIf(overflow, instr, "overflow");
+    if (x64) {
+      // we can't really do > 26bit multiplication without precision loss
+      __ movq(kScratchRegister, left);
+      __ shrq(kScratchRegister, Immediate(52));
+      DeoptimizeIf(not_zero, instr, "precision loss");
+    } else {
+      DeoptimizeIf(overflow, instr, "overflow");
+    }
   }
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
