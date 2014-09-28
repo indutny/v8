@@ -5334,7 +5334,7 @@ void MacroAssembler::TruncatingDiv(Register dividend,
   bool neg = (mag.multiplier & (static_cast<uint32_t>(1) << 31)) != 0;
 
   if (x64) {
-    imull(dividend);
+    imulq(dividend);
     if (divisor > 0 && neg) addq(rdx, dividend);
     if (divisor < 0 && !neg && mag.multiplier > 0) subq(rdx, dividend);
     if (mag.shift > 0) sarq(rdx, Immediate(mag.shift));
@@ -5342,8 +5342,7 @@ void MacroAssembler::TruncatingDiv(Register dividend,
     shrq(rax, Immediate(31));
     addq(rdx, rax);
   } else {
-    imulq(dividend);
-    bool neg = (mag.multiplier & (static_cast<uint32_t>(1) << 31)) != 0;
+    imull(dividend);
     if (divisor > 0 && neg) addl(rdx, dividend);
     if (divisor < 0 && !neg && mag.multiplier > 0) subl(rdx, dividend);
     if (mag.shift > 0) sarl(rdx, Immediate(mag.shift));
